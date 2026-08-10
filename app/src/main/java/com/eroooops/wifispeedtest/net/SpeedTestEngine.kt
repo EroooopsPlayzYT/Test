@@ -69,6 +69,7 @@ class SpeedTestEngine(private val network: Network?) {
             // --- Download ----------------------------------------------------
             emit { it.copy(phase = Phase.DOWNLOAD, phaseProgress = 0f, instantMbps = 0.0) }
             val download = measureThroughput(
+                label = "Download",
                 seconds = config.downloadSeconds,
                 connections = config.connections,
                 onSample = { progress, instant, average ->
@@ -88,6 +89,7 @@ class SpeedTestEngine(private val network: Network?) {
             // --- Upload ------------------------------------------------------
             emit { it.copy(phase = Phase.UPLOAD, phaseProgress = 0f, instantMbps = 0.0) }
             val upload = measureThroughput(
+                label = "Upload",
                 seconds = config.uploadSeconds,
                 connections = config.connections,
                 onSample = { progress, instant, average ->
@@ -190,6 +192,7 @@ class SpeedTestEngine(private val network: Network?) {
      * excluded from the average, so TCP slow start does not drag the result down.
      */
     private suspend fun measureThroughput(
+        label: String,
         seconds: Int,
         connections: Int,
         onSample: suspend (progress: Float, instantMbps: Double, averageMbps: Double) -> Unit,
@@ -237,6 +240,12 @@ class SpeedTestEngine(private val network: Network?) {
 
         workers.forEach { it.cancel() }
         workers.joinAll()
+
+        // The server answered the handshake but never gave us any payload —
+        // a wrong path or a rejected method. Report it instead of showing 0 Mbps.
+        if (counter.get() == 0L) {
+            throw IOException("$label transferred no data — check the $label URL")
+        }
         average
     }
 

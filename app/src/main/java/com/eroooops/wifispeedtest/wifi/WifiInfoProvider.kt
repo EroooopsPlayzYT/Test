@@ -39,8 +39,10 @@ class WifiInfoProvider(context: Context) {
     private val appContext = context.applicationContext
     private val connectivityManager =
         appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    // Nullable: the manifest marks Wi-Fi hardware optional, so a device without
+    // a radio must not crash on construction.
     private val wifiManager =
-        appContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+        appContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
 
     fun hasLocationPermission(): Boolean =
         ContextCompat.checkSelfPermission(appContext, Manifest.permission.ACCESS_FINE_LOCATION) ==
@@ -123,7 +125,7 @@ class WifiInfoProvider(context: Context) {
         }
 
     @Suppress("DEPRECATION")
-    private fun legacyWifiInfo(): WifiInfo? = runCatching { wifiManager.connectionInfo }.getOrNull()
+    private fun legacyWifiInfo(): WifiInfo? = runCatching { wifiManager?.connectionInfo }.getOrNull()
 }
 
 private fun LinkProperties.ipv4Address(): String? =
