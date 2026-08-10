@@ -18,6 +18,7 @@ import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.URL
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.coroutineContext
 import kotlin.math.abs
 import kotlin.random.Random
@@ -83,7 +84,9 @@ class SpeedTestEngine(private val network: Network?) {
                         )
                     }
                 },
-                worker = { deadline, counter -> downloadWorker(downloadUrl, deadline, counter) },
+                worker = { deadline, counter, failure ->
+                    downloadWorker(downloadUrl, deadline, counter, failure)
+                },
             )
             emit {
                 it.copy(
@@ -111,7 +114,9 @@ class SpeedTestEngine(private val network: Network?) {
                         )
                     }
                 },
-                worker = { deadline, counter -> uploadWorker(uploadUrl, deadline, counter) },
+                worker = { deadline, counter, failure ->
+                    uploadWorker(uploadUrl, deadline, counter, failure)
+                },
             )
 
             emit {
@@ -213,16 +218,21 @@ class SpeedTestEngine(private val network: Network?) {
             averageMbps: Double,
             bytes: Long,
         ) -> Unit,
-        worker: suspend (deadlineNanos: Long, counter: AtomicLong) -> Unit,
+        worker: suspend (
+            deadlineNanos: Long,
+            counter: AtomicLong,
+            failure: AtomicReference<String?>,
+        ) -> Unit,
     ): Throughput = coroutineScope {
         val counter = AtomicLong()
+        val failure = AtomicReference<String?>(null)
         val start = System.nanoTime()
         val durationNanos = seconds * 1_000_000_000L
         val deadline = start + durationNanos
         val warmupNanos = minOf(1_500_000_000L, durationNanos / 4)
 
         val workers = List(connections) {
-            launch(Dispatchers.IO) { worker(deadline, counter) }
+            launch(Dispatchers.IO) { worker(deadline, counter, failure) }
         }
 
         var windowBytes = 0L
@@ -262,17 +272,29 @@ class SpeedTestEngine(private val network: Network?) {
         // a wrong path or a rejected method. Report it instead of showing 0 Mbps.
         val total = counter.get()
         if (total == 0L) {
-            throw IOException("$label transferred no data — check the $label URL")
+            val reason = failure.get() ?: "check the $label URL"
+            throw IOException("$label failed: $reason")
         }
         Throughput(average, total)
     }
 
-    private suspend fun downloadWorker(url: URL, deadlineNanos: Long, counter: AtomicLong) {
+    private suspend fun downloadWorker(
+        url: URL,
+        deadlineNanos: Long,
+        counter: AtomicLong,
+        failure: AtomicReference<String?>,
+    ) {
         val buffer = ByteArray(BUFFER_BYTES)
         while (coroutineContext.isActive && System.nanoTime() < deadlineNanos) {
             var connection: HttpURLConnection? = null
             try {
                 connection = open(url, "GET")
+                val status = connection.responseCode
+                if (status !in 200..299) {
+                    failure.set("server returned HTTP $status")
+                    if (System.nanoTime() < deadlineNanos) delay(300)
+                    continue
+                }
                 connection.inputStream.use { input ->
                     while (coroutineContext.isActive && System.nanoTime() < deadlineNanos) {
                         val read = input.read(buffer)
@@ -281,6 +303,7 @@ class SpeedTestEngine(private val network: Network?) {
                     }
                 }
             } catch (error: IOException) {
+                failure.set(error.describe())
                 if (System.nanoTime() < deadlineNanos) delay(200)
             } finally {
                 runCatching { connection?.disconnect() }
@@ -288,7 +311,12 @@ class SpeedTestEngine(private val network: Network?) {
         }
     }
 
-    private suspend fun uploadWorker(url: URL, deadlineNanos: Long, counter: AtomicLong) {
+    private suspend fun uploadWorker(
+        url: URL,
+        deadlineNanos: Long,
+        counter: AtomicLong,
+        failure: AtomicReference<String?>,
+    ) {
         // Random payload: an incompressible body keeps any transparent
         // compression on the path from inflating the result.
         val buffer = Random.nextBytes(BUFFER_BYTES)
@@ -312,8 +340,12 @@ class SpeedTestEngine(private val network: Network?) {
                         counter.addAndGet(buffer.size.toLong())
                     }
                 }
-                runCatching { connection.responseCode }
+                val status = runCatching { connection.responseCode }.getOrNull()
+                if (status != null && status !in 200..299) {
+                    failure.set("server returned HTTP $status")
+                }
             } catch (error: IOException) {
+                failure.set(error.describe())
                 // Expected when the deadline cuts a fixed-length request short.
                 if (System.nanoTime() < deadlineNanos) delay(200)
             } finally {
@@ -335,6 +367,10 @@ class SpeedTestEngine(private val network: Network?) {
         return connection
     }
 }
+
+/** Exception text worth showing a user: the message, or the class when it has none. */
+private fun IOException.describe(): String =
+    message?.takeIf { it.isNotBlank() } ?: javaClass.simpleName
 
 private fun mbps(bytes: Long, nanos: Long): Double =
     if (nanos <= 0 || bytes <= 0) 0.0 else bytes * 8.0 / (nanos / 1_000_000_000.0) / 1_000_000.0

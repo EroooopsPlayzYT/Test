@@ -23,6 +23,7 @@ import java.io.IOException
 import java.net.Inet4Address
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 private const val POLL_INTERVAL_MS = 2_000L
 
@@ -146,7 +147,10 @@ class CellularInfoProvider(context: Context) {
                     try {
                         connectivityManager.requestNetwork(request, pending)
                     } catch (error: SecurityException) {
-                        continuation.cancel(error)
+                        // Must resume with the exception, not cancel: a cancellation
+                        // here unwinds the test job silently and the UI just snaps
+                        // back to "Start test" with nothing explaining why.
+                        continuation.resumeWithException(error)
                     }
                 }
             } ?: throw IOException(
