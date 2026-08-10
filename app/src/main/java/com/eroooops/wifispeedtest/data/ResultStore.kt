@@ -23,6 +23,8 @@ data class TestResult(
     val pingMs: Double,
     val jitterMs: Double,
     val bytesUsed: Long = 0L,
+    /** Which test server produced these numbers; runs against different ones are not comparable. */
+    val server: String? = null,
 )
 
 private const val HISTORY_FILE = "history.json"
@@ -92,6 +94,7 @@ private fun TestResult.toJson(): JSONObject = JSONObject().apply {
     put("pingMs", pingMs)
     put("jitterMs", jitterMs)
     put("bytesUsed", bytesUsed)
+    put("server", server ?: JSONObject.NULL)
 }
 
 private fun JSONObject.toResult(): TestResult = TestResult(
@@ -108,6 +111,7 @@ private fun JSONObject.toResult(): TestResult = TestResult(
     pingMs = optDouble("pingMs", 0.0),
     jitterMs = optDouble("jitterMs", 0.0),
     bytesUsed = optLong("bytesUsed", 0L),
+    server = optStringOrNull("server"),
 )
 
 private fun JSONObject.optStringOrNull(name: String): String? =

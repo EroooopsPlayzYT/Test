@@ -49,6 +49,29 @@ quiet:
 - Shortening the per-direction duration in settings is the direct lever — 5 s
   instead of 10 s roughly halves the bill.
 
+## Server fallback
+
+A single hard-coded test server is a single point of failure. Some carriers
+filter by TLS server name, which means the TCP handshake succeeds and the
+request that follows is silently dropped — the ping phase passes and the
+download returns nothing, which looks exactly like a broken app.
+
+So each run begins by probing the built-in servers in order (Cloudflare,
+Hetzner, OVH, Tele2) and using the first that actually serves bytes. The probe
+pulls real payload rather than just opening a socket, because a connect-only
+check is what gets fooled by SNI filtering in the first place. The chosen server
+is shown under the gauge and stored with each history entry, since runs against
+different servers are not comparable.
+
+If no upload target is reachable, the test measures download only rather than
+failing outright. If none of them can be reached at all, the error names each
+server and why it failed.
+
+Fallback applies only while the URLs are untouched. Point the app at your own
+LAN box and it uses that or reports an error — silently hopping onto the
+internet and presenting the result as your local link would be worse than
+failing.
+
 ## Testing the link vs. testing your internet
 
 By default the app talks to Cloudflare's public endpoints

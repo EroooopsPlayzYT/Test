@@ -8,6 +8,8 @@ import com.eroooops.wifispeedtest.cell.CellularInfoProvider
 import com.eroooops.wifispeedtest.cell.CellularStatus
 import com.eroooops.wifispeedtest.data.ResultStore
 import com.eroooops.wifispeedtest.data.TestResult
+import com.eroooops.wifispeedtest.net.Endpoint
+import com.eroooops.wifispeedtest.net.Endpoints
 import com.eroooops.wifispeedtest.net.Phase
 import com.eroooops.wifispeedtest.net.SpeedTestEngine
 import com.eroooops.wifispeedtest.net.TestConfig
@@ -34,6 +36,8 @@ data class UiState(
     val downloadMbps: Double? = null,
     val uploadMbps: Double? = null,
     val bytesUsed: Long = 0L,
+    val server: String? = null,
+    val notice: String? = null,
     val error: String? = null,
     val config: TestConfig = TestConfig(),
     val history: List<TestResult> = emptyList(),
@@ -42,7 +46,8 @@ data class UiState(
     val cellularSupported: Boolean = true,
 ) {
     val running: Boolean
-        get() = phase == Phase.PING || phase == Phase.DOWNLOAD || phase == Phase.UPLOAD
+        get() = phase == Phase.PROBE || phase == Phase.PING ||
+            phase == Phase.DOWNLOAD || phase == Phase.UPLOAD
 }
 
 class SpeedTestViewModel(application: Application) : AndroidViewModel(application) {
@@ -93,6 +98,8 @@ class SpeedTestViewModel(application: Application) : AndroidViewModel(applicatio
             downloadMbps = null,
             uploadMbps = null,
             bytesUsed = 0L,
+            server = null,
+            notice = null,
             error = null,
         )
     }
@@ -101,7 +108,7 @@ class SpeedTestViewModel(application: Application) : AndroidViewModel(applicatio
         if (testJob?.isActive == true) return
         val transport = _state.value.transport
         _state.value = _state.value.copy(
-            phase = Phase.PING,
+            phase = Phase.PROBE,
             phaseProgress = 0f,
             instantMbps = 0.0,
             pingMs = null,
@@ -110,6 +117,8 @@ class SpeedTestViewModel(application: Application) : AndroidViewModel(applicatio
             downloadMbps = null,
             uploadMbps = null,
             bytesUsed = 0L,
+            server = null,
+            notice = null,
             error = null,
         )
 
@@ -134,11 +143,24 @@ class SpeedTestViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     private suspend fun runOn(network: Network?, transport: Transport) {
-        SpeedTestEngine(network).run(_state.value.config).collect { update ->
+        val config = _state.value.config
+        SpeedTestEngine(network).run(config, candidatesFor(config)).collect { update ->
             applyUpdate(update)
             if (update.phase == Phase.DONE) record(update, transport)
         }
     }
+
+    /**
+     * Falling back is only safe while the built-in URLs are untouched. Someone
+     * who aimed the app at a LAN box wants that box or an error, not a silent
+     * hop onto the internet reported as if it were their local link.
+     */
+    private fun candidatesFor(config: TestConfig): List<Endpoint> =
+        if (config.usesDefaultServer) {
+            Endpoints.BUILT_IN
+        } else {
+            listOf(Endpoint("Custom", config.downloadUrl, config.uploadUrl.ifBlank { null }))
+        }
 
     fun stop() {
         testJob?.cancel()
@@ -171,6 +193,8 @@ class SpeedTestViewModel(application: Application) : AndroidViewModel(applicatio
             downloadMbps = update.downloadMbps ?: _state.value.downloadMbps,
             uploadMbps = update.uploadMbps ?: _state.value.uploadMbps,
             bytesUsed = maxOf(update.bytesUsed, _state.value.bytesUsed),
+            server = update.server ?: _state.value.server,
+            notice = update.notice ?: _state.value.notice,
             error = update.error,
         )
     }
@@ -193,6 +217,7 @@ class SpeedTestViewModel(application: Application) : AndroidViewModel(applicatio
                     pingMs = update.pingMs ?: 0.0,
                     jitterMs = update.jitterMs ?: 0.0,
                     bytesUsed = update.bytesUsed,
+                    server = update.server,
                 )
             }
 
@@ -209,6 +234,7 @@ class SpeedTestViewModel(application: Application) : AndroidViewModel(applicatio
                     pingMs = update.pingMs ?: 0.0,
                     jitterMs = update.jitterMs ?: 0.0,
                     bytesUsed = update.bytesUsed,
+                    server = update.server,
                 )
             }
         }

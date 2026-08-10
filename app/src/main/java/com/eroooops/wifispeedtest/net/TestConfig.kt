@@ -17,16 +17,20 @@ data class TestConfig(
     val uploadSeconds: Int = 10,
     val pingCount: Int = 10,
 ) {
+    /** True while the URLs are untouched, which is when falling back is safe. */
+    val usesDefaultServer: Boolean
+        get() = downloadUrl == DEFAULT_DOWNLOAD_URL && uploadUrl == DEFAULT_UPLOAD_URL
+
     companion object {
-        const val DEFAULT_DOWNLOAD_URL = "https://speed.cloudflare.com/__down?bytes=200000000"
-        const val DEFAULT_UPLOAD_URL = "https://speed.cloudflare.com/__up"
+        val DEFAULT_DOWNLOAD_URL: String = Endpoints.DEFAULT.downloadUrl
+        val DEFAULT_UPLOAD_URL: String = Endpoints.DEFAULT.uploadUrl.orEmpty()
 
         val CONNECTION_RANGE = 1..8
         val DURATION_RANGE = 5..30
     }
 }
 
-enum class Phase { IDLE, PING, DOWNLOAD, UPLOAD, DONE, ERROR }
+enum class Phase { IDLE, PROBE, PING, DOWNLOAD, UPLOAD, DONE, ERROR }
 
 /** One frame of test state; the engine emits a full snapshot every ~200 ms. */
 data class TestUpdate(
@@ -42,5 +46,9 @@ data class TestUpdate(
     val packetLossPct: Double? = null,
     /** Bytes moved so far. Worth watching when the test runs on mobile data. */
     val bytesUsed: Long = 0L,
+    /** Which server answered, once one has been picked. */
+    val server: String? = null,
+    /** Non-fatal information, e.g. that upload had to be skipped. */
+    val notice: String? = null,
     val error: String? = null,
 )

@@ -29,6 +29,8 @@ private const val UPLOAD_REQUEST_BYTES = 64L * 1024 * 1024
 private const val CONNECT_TIMEOUT_MS = 10_000
 private const val READ_TIMEOUT_MS = 10_000
 private const val PING_TIMEOUT_MS = 4_000
+private const val PROBE_TIMEOUT_MS = 6_000
+private const val PROBE_UPLOAD_BYTES = 128 * 1024
 
 /**
  * Runs a ping / download / upload test and reports progress as a flow.
@@ -39,8 +41,11 @@ private const val PING_TIMEOUT_MS = 4_000
  */
 class SpeedTestEngine(private val network: Network?) {
 
-    fun run(config: TestConfig): Flow<TestUpdate> = channelFlow {
-        var snapshot = TestUpdate(phase = Phase.PING)
+    fun run(
+        config: TestConfig,
+        candidates: List<Endpoint> = listOf(Endpoints.DEFAULT),
+    ): Flow<TestUpdate> = channelFlow {
+        var snapshot = TestUpdate(phase = Phase.PROBE)
 
         suspend fun emit(transform: (TestUpdate) -> TestUpdate) {
             snapshot = transform(snapshot)
@@ -48,8 +53,30 @@ class SpeedTestEngine(private val network: Network?) {
         }
 
         try {
-            val downloadUrl = URL(config.downloadUrl)
-            val uploadUrl = URL(config.uploadUrl)
+            // --- Pick a server that actually answers -------------------------
+            emit { it.copy(phase = Phase.PROBE, phaseProgress = 0f) }
+            val selection = selectEndpoint(candidates) { done ->
+                emit { it.copy(phaseProgress = done.toFloat() / candidates.size) }
+            }
+
+            val chosen = selection.download
+                ?: throw IOException(
+                    "No test server could be reached. " +
+                        selection.failures.joinToString("; ") { (name, reason) -> "$name: $reason" }
+                )
+
+            val downloadUrl = URL(chosen.downloadUrl)
+            val uploadTarget = selection.upload
+            emit {
+                it.copy(
+                    server = chosen.name,
+                    notice = if (uploadTarget == null) {
+                        "No reachable upload server — measuring download only."
+                    } else {
+                        null
+                    },
+                )
+            }
 
             // --- Latency -----------------------------------------------------
             val ping = measureLatency(downloadUrl, config.pingCount) { done, stats ->
@@ -98,26 +125,33 @@ class SpeedTestEngine(private val network: Network?) {
             }
 
             // --- Upload ------------------------------------------------------
-            emit { it.copy(phase = Phase.UPLOAD, phaseProgress = 0f, instantMbps = 0.0) }
-            val upload = measureThroughput(
-                label = "Upload",
-                seconds = config.uploadSeconds,
-                connections = config.connections,
-                onSample = { progress, instant, average, bytes ->
-                    emit {
-                        it.copy(
-                            phase = Phase.UPLOAD,
-                            phaseProgress = progress,
-                            instantMbps = instant,
-                            uploadMbps = average,
-                            bytesUsed = download.bytes + bytes,
-                        )
-                    }
-                },
-                worker = { deadline, counter, failure ->
-                    uploadWorker(uploadUrl, deadline, counter, failure)
-                },
-            )
+            // A missing upload server downgrades the test rather than failing
+            // it: a download figure alone still answers most questions.
+            val upload = if (uploadTarget == null) {
+                null
+            } else {
+                emit { it.copy(phase = Phase.UPLOAD, phaseProgress = 0f, instantMbps = 0.0) }
+                val uploadUrl = URL(uploadTarget)
+                measureThroughput(
+                    label = "Upload",
+                    seconds = config.uploadSeconds,
+                    connections = config.connections,
+                    onSample = { progress, instant, average, bytes ->
+                        emit {
+                            it.copy(
+                                phase = Phase.UPLOAD,
+                                phaseProgress = progress,
+                                instantMbps = instant,
+                                uploadMbps = average,
+                                bytesUsed = download.bytes + bytes,
+                            )
+                        }
+                    },
+                    worker = { deadline, counter, failure ->
+                        uploadWorker(uploadUrl, deadline, counter, failure)
+                    },
+                )
+            }
 
             emit {
                 it.copy(
@@ -125,8 +159,8 @@ class SpeedTestEngine(private val network: Network?) {
                     phaseProgress = 1f,
                     instantMbps = 0.0,
                     downloadMbps = download.averageMbps,
-                    uploadMbps = upload.averageMbps,
-                    bytesUsed = download.bytes + upload.bytes,
+                    uploadMbps = upload?.averageMbps,
+                    bytesUsed = download.bytes + (upload?.bytes ?: 0L),
                 )
             }
         } catch (cancellation: CancellationException) {
@@ -139,6 +173,93 @@ class SpeedTestEngine(private val network: Network?) {
                     error = error.message ?: error.javaClass.simpleName,
                 )
             }
+        }
+    }
+
+    // -- server selection ----------------------------------------------------
+
+    private data class Selection(
+        val download: Endpoint? = null,
+        val upload: String? = null,
+        val failures: List<Pair<String, String>> = emptyList(),
+    )
+
+    /**
+     * Finds the first candidate that really serves bytes, then an upload target.
+     *
+     * A reachability check has to pull actual payload, not just open a socket:
+     * carriers that filter on the TLS server name let the TCP handshake through
+     * and drop what follows, so a connect-only probe would happily pick a host
+     * that cannot serve a single byte.
+     */
+    private suspend fun selectEndpoint(
+        candidates: List<Endpoint>,
+        onProgress: suspend (done: Int) -> Unit,
+    ): Selection {
+        val failures = mutableListOf<Pair<String, String>>()
+        var download: Endpoint? = null
+
+        candidates.forEachIndexed { index, candidate ->
+            if (download == null) {
+                val error = probeDownload(candidate.downloadUrl)
+                if (error == null) download = candidate else failures += candidate.name to error
+            }
+            onProgress(index + 1)
+        }
+
+        val chosen = download ?: return Selection(failures = failures)
+
+        // Prefer the chosen host's own upload endpoint, then anyone else's.
+        val uploadCandidates = buildList {
+            chosen.uploadUrl?.let { add(it) }
+            candidates.mapNotNull { it.uploadUrl }.forEach { if (it !in this) add(it) }
+        }
+        val upload = uploadCandidates.firstOrNull { probeUpload(it) == null }
+
+        return Selection(download = chosen, upload = upload, failures = failures)
+    }
+
+    /** Returns null when the URL serves bytes, otherwise why it did not. */
+    private suspend fun probeDownload(url: String): String? = withContext(Dispatchers.IO) {
+        var connection: HttpURLConnection? = null
+        try {
+            connection = open(URL(url), "GET").apply {
+                connectTimeout = PROBE_TIMEOUT_MS
+                readTimeout = PROBE_TIMEOUT_MS
+            }
+            val status = connection.responseCode
+            if (status !in 200..299) return@withContext "HTTP $status"
+            val read = connection.inputStream.use { it.read(ByteArray(8 * 1024)) }
+            if (read <= 0) "empty response" else null
+        } catch (error: IOException) {
+            error.describe()
+        } catch (error: SecurityException) {
+            error.describe()
+        } finally {
+            runCatching { connection?.disconnect() }
+        }
+    }
+
+    private suspend fun probeUpload(url: String): String? = withContext(Dispatchers.IO) {
+        var connection: HttpURLConnection? = null
+        try {
+            val payload = ByteArray(PROBE_UPLOAD_BYTES)
+            connection = open(URL(url), "POST").apply {
+                connectTimeout = PROBE_TIMEOUT_MS
+                readTimeout = PROBE_TIMEOUT_MS
+                doOutput = true
+                setRequestProperty("Content-Type", "application/octet-stream")
+                setFixedLengthStreamingMode(payload.size.toLong())
+            }
+            connection.outputStream.use { it.write(payload) }
+            val status = connection.responseCode
+            if (status in 200..299) null else "HTTP $status"
+        } catch (error: IOException) {
+            error.describe()
+        } catch (error: SecurityException) {
+            error.describe()
+        } finally {
+            runCatching { connection?.disconnect() }
         }
     }
 
@@ -369,7 +490,7 @@ class SpeedTestEngine(private val network: Network?) {
 }
 
 /** Exception text worth showing a user: the message, or the class when it has none. */
-private fun IOException.describe(): String =
+private fun Exception.describe(): String =
     message?.takeIf { it.isNotBlank() } ?: javaClass.simpleName
 
 private fun mbps(bytes: Long, nanos: Long): Double =

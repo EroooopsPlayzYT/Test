@@ -178,6 +178,24 @@ fun SpeedTestScreen(viewModel: SpeedTestViewModel) {
                 DataUsageNotice(roaming = cellular.roaming)
             }
 
+            state.notice?.let { message ->
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp),
+                ) {
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(16.dp),
+                    )
+                }
+            }
+
             state.error?.let { message ->
                 Card(
                     colors = CardDefaults.cardColors(
@@ -243,6 +261,7 @@ private fun gaugeValue(state: UiState): Double = when (state.phase) {
 
 private fun captionFor(phase: Phase): String = when (phase) {
     Phase.IDLE -> "Ready"
+    Phase.PROBE -> "Finding a test server"
     Phase.PING -> "Measuring latency"
     Phase.DOWNLOAD -> "Download"
     Phase.UPLOAD -> "Upload"
@@ -251,10 +270,12 @@ private fun captionFor(phase: Phase): String = when (phase) {
 }
 
 private fun detailFor(state: UiState): String? = when (state.phase) {
+    Phase.PROBE -> "Trying each server in turn"
     Phase.DOWNLOAD -> state.downloadMbps?.let { "avg ${formatSpeed(it)} Mbps" }
     Phase.UPLOAD -> state.uploadMbps?.let { "avg ${formatSpeed(it)} Mbps" }
-    Phase.DONE -> "Tap start to run again"
-    else -> null
+    Phase.DONE -> state.server?.let { "via $it · tap start to run again" }
+        ?: "Tap start to run again"
+    else -> state.server?.let { "via $it" }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -597,6 +618,7 @@ private fun HistoryRow(result: TestResult) {
                         formatTimestamp(result.timestamp),
                         result.detail,
                         result.signalDbm?.let { "$it dBm" },
+                        result.server,
                         result.bytesUsed.takeIf { it > 0 }?.let { formatBytes(it) },
                     ).joinToString(" · "),
                     style = MaterialTheme.typography.bodySmall,
