@@ -17,3 +17,13 @@ fun formatMillis(ms: Double?): String =
 
 fun formatTimestamp(millis: Long): String =
     SimpleDateFormat("d MMM, HH:mm", Locale.getDefault()).format(Date(millis))
+
+/** Data volume in the units a mobile allowance is sold in — MB, then GB. */
+fun formatBytes(bytes: Long): String {
+    val megabytes = bytes / 1_000_000.0
+    return when {
+        megabytes >= 1000 -> String.format(Locale.getDefault(), "%.2f GB", megabytes / 1000)
+        megabytes >= 10 -> String.format(Locale.getDefault(), "%.0f MB", megabytes)
+        else -> String.format(Locale.getDefault(), "%.1f MB", megabytes)
+    }
+}

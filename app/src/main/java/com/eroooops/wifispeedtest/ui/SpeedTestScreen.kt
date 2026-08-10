@@ -31,23 +31,28 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.eroooops.wifispeedtest.cell.CellularStatus
 import com.eroooops.wifispeedtest.data.TestResult
 import com.eroooops.wifispeedtest.net.Phase
+import com.eroooops.wifispeedtest.net.Transport
 import com.eroooops.wifispeedtest.wifi.WifiStatus
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -55,6 +60,7 @@ import com.eroooops.wifispeedtest.wifi.WifiStatus
 fun SpeedTestScreen(viewModel: SpeedTestViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val wifi by viewModel.wifi.collectAsStateWithLifecycle()
+    val cellular by viewModel.cellular.collectAsStateWithLifecycle()
 
     var showSettings by remember { mutableStateOf(false) }
 
@@ -72,7 +78,7 @@ fun SpeedTestScreen(viewModel: SpeedTestViewModel) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Wi-Fi Speed Test") },
+                title = { Text("Speed Test") },
                 actions = {
                     IconButton(onClick = { showSettings = true }) {
                         Icon(Icons.Default.Settings, contentDescription = "Test settings")
@@ -89,13 +95,31 @@ fun SpeedTestScreen(viewModel: SpeedTestViewModel) {
                 .padding(horizontal = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            WifiCard(
-                wifi = wifi,
-                locationGranted = state.locationPermissionGranted,
-                onGrantLocation = {
-                    permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
-                },
+            TransportSelector(
+                selected = state.transport,
+                cellularSupported = state.cellularSupported,
+                enabled = !state.running,
+                onSelect = viewModel::selectTransport,
             )
+
+            when (state.transport) {
+                Transport.WIFI -> WifiCard(
+                    wifi = wifi,
+                    locationGranted = state.locationPermissionGranted,
+                    onGrantLocation = {
+                        permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+                    },
+                )
+
+                Transport.CELLULAR -> CellularCard(
+                    cellular = cellular,
+                    supported = state.cellularSupported,
+                    phoneGranted = state.phonePermissionGranted,
+                    onGrantPhone = {
+                        permissionLauncher.launch(Manifest.permission.READ_PHONE_STATE)
+                    },
+                )
+            }
 
             SpeedGauge(
                 mbps = gaugeValue(state),
@@ -113,13 +137,22 @@ fun SpeedTestScreen(viewModel: SpeedTestViewModel) {
                 )
             }
 
+            if (state.bytesUsed > 0) {
+                Text(
+                    text = "Data used: ${formatBytes(state.bytesUsed)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+            }
+
             MetricsRow(state)
 
             Spacer(Modifier.height(20.dp))
 
             Button(
                 onClick = { if (state.running) viewModel.stop() else viewModel.start() },
-                enabled = wifi.connected || state.running,
+                enabled = state.running || canStart(state, wifi),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
@@ -132,13 +165,17 @@ fun SpeedTestScreen(viewModel: SpeedTestViewModel) {
                 Text(if (state.running) "Stop" else "Start test")
             }
 
-            if (!wifi.connected) {
+            blockedReason(state, wifi)?.let { reason ->
                 Text(
-                    text = "Connect to a Wi-Fi network to run a test.",
+                    text = reason,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 8.dp),
                 )
+            }
+
+            if (state.transport == Transport.CELLULAR && state.cellularSupported) {
+                DataUsageNotice(roaming = cellular.roaming)
             }
 
             state.error?.let { message ->
@@ -180,6 +217,24 @@ fun SpeedTestScreen(viewModel: SpeedTestViewModel) {
     }
 }
 
+private fun canStart(state: UiState, wifi: WifiStatus): Boolean = when (state.transport) {
+    Transport.WIFI -> wifi.connected
+    // The cellular network is requested at start time, so it does not need to
+    // already be up — only the hardware has to exist.
+    Transport.CELLULAR -> state.cellularSupported
+}
+
+private fun blockedReason(state: UiState, wifi: WifiStatus): String? = when {
+    state.running -> null
+    state.transport == Transport.WIFI && !wifi.connected ->
+        "Connect to a Wi-Fi network to run a test."
+
+    state.transport == Transport.CELLULAR && !state.cellularSupported ->
+        "This device has no mobile radio."
+
+    else -> null
+}
+
 private fun gaugeValue(state: UiState): Double = when (state.phase) {
     Phase.DOWNLOAD, Phase.UPLOAD -> state.instantMbps
     Phase.DONE -> state.downloadMbps ?: 0.0
@@ -200,6 +255,68 @@ private fun detailFor(state: UiState): String? = when (state.phase) {
     Phase.UPLOAD -> state.uploadMbps?.let { "avg ${formatSpeed(it)} Mbps" }
     Phase.DONE -> "Tap start to run again"
     else -> null
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TransportSelector(
+    selected: Transport,
+    cellularSupported: Boolean,
+    enabled: Boolean,
+    onSelect: (Transport) -> Unit,
+) {
+    val options = Transport.entries
+    SingleChoiceSegmentedButtonRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 12.dp)
+    ) {
+        options.forEachIndexed { index, transport ->
+            SegmentedButton(
+                selected = transport == selected,
+                onClick = { onSelect(transport) },
+                enabled = enabled &&
+                    (transport != Transport.CELLULAR || cellularSupported),
+                shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
+            ) {
+                Text(transport.label)
+            }
+        }
+    }
+}
+
+@Composable
+private fun DataUsageNotice(roaming: Boolean) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = if (roaming) {
+                MaterialTheme.colorScheme.errorContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant
+            },
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 12.dp),
+    ) {
+        Text(
+            text = if (roaming) {
+                "You are roaming. A full test moves as much data as the link allows — " +
+                    "often hundreds of megabytes — and will be billed at roaming rates."
+            } else {
+                "A test moves as much data as the link allows, often hundreds of " +
+                    "megabytes, and it counts against your mobile allowance. Shorten the " +
+                    "duration in settings to use less."
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = if (roaming) {
+                MaterialTheme.colorScheme.onErrorContainer
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            modifier = Modifier.padding(16.dp),
+        )
+    }
 }
 
 @Composable
@@ -276,6 +393,86 @@ private fun WifiCard(
                 Spacer(Modifier.height(8.dp))
                 TextButton(onClick = onGrantLocation, modifier = Modifier.align(Alignment.Start)) {
                     Text("Grant location access to show the network name")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CellularCard(
+    cellular: CellularStatus,
+    supported: Boolean,
+    phoneGranted: Boolean,
+    onGrantPhone: () -> Unit,
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                SignalBars(
+                    bars = cellular.signalLevel,
+                    modifier = Modifier.size(28.dp, 22.dp),
+                )
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = when {
+                            !supported -> "No mobile radio"
+                            cellular.carrier != null -> cellular.carrier
+                            else -> "Mobile data"
+                        },
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    val subtitle = listOfNotNull(
+                        cellular.networkType,
+                        if (cellular.roaming) "roaming" else null,
+                        if (cellular.connected) null else "idle",
+                    ).joinToString(" · ")
+                    if (subtitle.isNotEmpty()) {
+                        Text(
+                            text = subtitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+
+            if (supported) {
+                Spacer(Modifier.height(12.dp))
+                HorizontalDivider()
+                Spacer(Modifier.height(12.dp))
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    InfoCell(
+                        "Signal",
+                        cellular.signalDbm?.let { "$it dBm" } ?: "—",
+                        cellular.signalLabel,
+                        Modifier.weight(1f),
+                    )
+                    InfoCell(
+                        "Reported",
+                        cellular.downstreamMbps?.let { "$it Mbps" } ?: "—",
+                        "downlink estimate",
+                        Modifier.weight(1f),
+                    )
+                    InfoCell(
+                        "IP address",
+                        cellular.ipv4 ?: "—",
+                        null,
+                        Modifier.weight(1f),
+                    )
+                }
+            }
+
+            if (supported && !phoneGranted && cellular.networkType == null) {
+                Spacer(Modifier.height(8.dp))
+                TextButton(onClick = onGrantPhone, modifier = Modifier.align(Alignment.Start)) {
+                    Text("Grant phone access to show the radio technology")
                 }
             }
         }
@@ -390,15 +587,17 @@ private fun HistoryRow(result: TestResult) {
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = result.ssid ?: "Wi-Fi",
+                    text = result.networkLabel ?: result.transport.label,
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium,
                 )
                 Text(
                     text = listOfNotNull(
+                        result.transport.label,
                         formatTimestamp(result.timestamp),
-                        result.band,
-                        result.rssiDbm?.let { "$it dBm" },
+                        result.detail,
+                        result.signalDbm?.let { "$it dBm" },
+                        result.bytesUsed.takeIf { it > 0 }?.let { formatBytes(it) },
                     ).joinToString(" · "),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

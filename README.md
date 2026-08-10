@@ -1,10 +1,14 @@
-# Wi-Fi Speed Test
+# Speed Test
 
-An Android app that measures what your Wi-Fi connection actually delivers:
-latency, jitter, download and upload throughput — alongside the radio details
-(band, channel, signal, negotiated link rate) that explain the result.
+An Android app that measures what your connection actually delivers — over
+**Wi-Fi or mobile data** — reporting latency, jitter, download and upload
+throughput alongside the radio details that explain the result.
 
 Native Kotlin, Jetpack Compose, no third-party runtime dependencies.
+
+Pick the transport at the top of the screen. The status card and the recorded
+history follow the selection, so Wi-Fi and cellular runs stay comparable but
+never get confused for one another.
 
 ## What it measures
 
@@ -15,24 +19,41 @@ Native Kotlin, Jetpack Compose, no third-party runtime dependencies.
 | **Download** | Parallel HTTP GETs, bytes counted over a fixed window. |
 | **Upload** | Parallel HTTP POSTs of random (incompressible) payload. |
 
-Two details that make the numbers trustworthy:
+Three details that make the numbers trustworthy:
 
-- **Every socket is pinned to the Wi-Fi network.** Connections are opened
-  through the Wi-Fi `Network` handle, so results describe the Wi-Fi link even
-  when mobile data is up and Android would otherwise route around it.
+- **Every socket is pinned to the transport under test.** Connections are opened
+  through that transport's `Network` handle, so a Wi-Fi run cannot silently
+  measure cellular, or the reverse, whichever one Android happens to prefer.
+- **Mobile data is requested and held for the test.** While Wi-Fi is connected
+  the cellular radio is usually idle, so a cellular run files an explicit
+  `requestNetwork` for the duration and releases it afterwards. Without that,
+  testing mobile data without first turning Wi-Fi off would not work at all.
 - **The first 1.5 s of each transfer is discarded.** TCP slow start would
   otherwise drag the average well below the real rate.
 
-The Wi-Fi card also reports the **negotiated link rate** from `WifiInfo`. That
-is the PHY rate between the phone and the access point — it is the ceiling for
-throughput, not a measurement of it, and it is normally much higher than the
-speed you actually see.
+The Wi-Fi card reports the **negotiated link rate** from `WifiInfo`; the mobile
+card reports the platform's **downlink estimate**. Both are the connection's own
+claim about itself — a ceiling, not a measurement — and both normally sit well
+above the speed you actually get.
 
-## Testing the Wi-Fi vs. testing your internet
+## Mobile data costs data
+
+A full test moves as much data as the link allows, which on a fast 5G connection
+can be hundreds of megabytes per run. The app is explicit about this rather than
+quiet:
+
+- Selecting **Mobile data** shows a notice before you start, and a louder one
+  while roaming.
+- Bytes transferred are counted live during the run and stored with each history
+  entry, so you can see exactly what a test cost.
+- Shortening the per-direction duration in settings is the direct lever — 5 s
+  instead of 10 s roughly halves the bill.
+
+## Testing the link vs. testing your internet
 
 By default the app talks to Cloudflare's public endpoints
 (`speed.cloudflare.com`), so it measures your internet connection *through*
-Wi-Fi — whichever is slower is what you see.
+the selected transport — whichever is slower is what you see.
 
 To measure the Wi-Fi link itself, open the settings sheet and point the download
 and upload URLs at a machine on your own LAN. Anything that serves a large file
@@ -47,14 +68,19 @@ python3 -m http.server 8080
 then set the download URL to `http://<laptop-ip>:8080/big.bin`. Cleartext HTTP
 is permitted for exactly this reason (see `network_security_config.xml`).
 
+A LAN target only makes sense for Wi-Fi. On mobile data the phone is not on your
+network, so leave the public endpoints in place there.
+
 ## Permissions
 
 | Permission | Why |
 | --- | --- |
 | `INTERNET` | Runs the transfers. |
-| `ACCESS_NETWORK_STATE` | Finds the Wi-Fi network and pins sockets to it. |
+| `ACCESS_NETWORK_STATE` | Finds the Wi-Fi and mobile networks and pins sockets to the one under test. |
 | `ACCESS_WIFI_STATE` | Reads signal, link rate, frequency. |
+| `CHANGE_NETWORK_STATE` | Asks the system to bring mobile data up for a cellular test. Normal permission, granted at install. |
 | `ACCESS_FINE_LOCATION` | **Optional.** Android only reveals the SSID/BSSID of the connected network to apps holding a location permission. Denying it hides the network name; everything else still works. |
+| `READ_PHONE_STATE` | **Optional.** Same idea on the cellular side: the carrier name is free, but the radio technology (LTE / 5G NR) needs this. Denying it hides that one field. |
 
 ## Building
 
@@ -73,8 +99,9 @@ Android 7.0 (API 24).
 ```
 app/src/main/java/com/eroooops/wifispeedtest/
 ├── MainActivity.kt
-├── net/            SpeedTestEngine — ping, download, upload; TestConfig
-├── wifi/           WifiInfoProvider — live radio state via NetworkCallback
+├── net/            SpeedTestEngine — ping, download, upload; TestConfig, Transport
+├── wifi/           WifiInfoProvider — live Wi-Fi state via NetworkCallback
+├── cell/           CellularInfoProvider — mobile state, and holding the radio up
 ├── data/           ResultStore — JSON history + saved settings
 └── ui/             Compose screen, gauge, settings sheet, ViewModel
 ```

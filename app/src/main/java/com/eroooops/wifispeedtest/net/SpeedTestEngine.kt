@@ -72,19 +72,27 @@ class SpeedTestEngine(private val network: Network?) {
                 label = "Download",
                 seconds = config.downloadSeconds,
                 connections = config.connections,
-                onSample = { progress, instant, average ->
+                onSample = { progress, instant, average, bytes ->
                     emit {
                         it.copy(
                             phase = Phase.DOWNLOAD,
                             phaseProgress = progress,
                             instantMbps = instant,
                             downloadMbps = average,
+                            bytesUsed = bytes,
                         )
                     }
                 },
                 worker = { deadline, counter -> downloadWorker(downloadUrl, deadline, counter) },
             )
-            emit { it.copy(downloadMbps = download, instantMbps = 0.0, phaseProgress = 1f) }
+            emit {
+                it.copy(
+                    downloadMbps = download.averageMbps,
+                    instantMbps = 0.0,
+                    phaseProgress = 1f,
+                    bytesUsed = download.bytes,
+                )
+            }
 
             // --- Upload ------------------------------------------------------
             emit { it.copy(phase = Phase.UPLOAD, phaseProgress = 0f, instantMbps = 0.0) }
@@ -92,13 +100,14 @@ class SpeedTestEngine(private val network: Network?) {
                 label = "Upload",
                 seconds = config.uploadSeconds,
                 connections = config.connections,
-                onSample = { progress, instant, average ->
+                onSample = { progress, instant, average, bytes ->
                     emit {
                         it.copy(
                             phase = Phase.UPLOAD,
                             phaseProgress = progress,
                             instantMbps = instant,
                             uploadMbps = average,
+                            bytesUsed = download.bytes + bytes,
                         )
                     }
                 },
@@ -110,8 +119,9 @@ class SpeedTestEngine(private val network: Network?) {
                     phase = Phase.DONE,
                     phaseProgress = 1f,
                     instantMbps = 0.0,
-                    downloadMbps = download,
-                    uploadMbps = upload,
+                    downloadMbps = download.averageMbps,
+                    uploadMbps = upload.averageMbps,
+                    bytesUsed = download.bytes + upload.bytes,
                 )
             }
         } catch (cancellation: CancellationException) {
@@ -191,13 +201,20 @@ class SpeedTestEngine(private val network: Network?) {
      * The first quarter of the run (capped at 1.5 s) is treated as warm-up and
      * excluded from the average, so TCP slow start does not drag the result down.
      */
+    private data class Throughput(val averageMbps: Double, val bytes: Long)
+
     private suspend fun measureThroughput(
         label: String,
         seconds: Int,
         connections: Int,
-        onSample: suspend (progress: Float, instantMbps: Double, averageMbps: Double) -> Unit,
+        onSample: suspend (
+            progress: Float,
+            instantMbps: Double,
+            averageMbps: Double,
+            bytes: Long,
+        ) -> Unit,
         worker: suspend (deadlineNanos: Long, counter: AtomicLong) -> Unit,
-    ): Double = coroutineScope {
+    ): Throughput = coroutineScope {
         val counter = AtomicLong()
         val start = System.nanoTime()
         val durationNanos = seconds * 1_000_000_000L
@@ -234,7 +251,7 @@ class SpeedTestEngine(private val network: Network?) {
             }
 
             val progress = ((now - start).toDouble() / durationNanos).coerceIn(0.0, 1.0).toFloat()
-            onSample(progress, instant, average)
+            onSample(progress, instant, average, bytes)
             if (now >= deadline) break
         }
 
@@ -243,10 +260,11 @@ class SpeedTestEngine(private val network: Network?) {
 
         // The server answered the handshake but never gave us any payload —
         // a wrong path or a rejected method. Report it instead of showing 0 Mbps.
-        if (counter.get() == 0L) {
+        val total = counter.get()
+        if (total == 0L) {
             throw IOException("$label transferred no data — check the $label URL")
         }
-        average
+        Throughput(average, total)
     }
 
     private suspend fun downloadWorker(url: URL, deadlineNanos: Long, counter: AtomicLong) {

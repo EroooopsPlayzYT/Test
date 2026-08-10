@@ -2,21 +2,27 @@ package com.eroooops.wifispeedtest.data
 
 import android.content.Context
 import com.eroooops.wifispeedtest.net.TestConfig
+import com.eroooops.wifispeedtest.net.Transport
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
-/** A completed test, kept so runs can be compared over time and across rooms. */
+/** A completed test, kept so runs can be compared over time and across networks. */
 data class TestResult(
     val timestamp: Long,
-    val ssid: String?,
-    val band: String?,
-    val rssiDbm: Int?,
+    val transport: Transport,
+    /** SSID on Wi-Fi, carrier name on mobile data. */
+    val networkLabel: String?,
+    /** Band and channel on Wi-Fi, radio technology on mobile data. */
+    val detail: String?,
+    val signalDbm: Int?,
+    /** Negotiated Wi-Fi link rate; null on mobile data. */
     val linkSpeedMbps: Int?,
     val downloadMbps: Double,
     val uploadMbps: Double,
     val pingMs: Double,
     val jitterMs: Double,
+    val bytesUsed: Long = 0L,
 )
 
 private const val HISTORY_FILE = "history.json"
@@ -66,31 +72,46 @@ class ResultStore(context: Context) {
             .putInt("pingCount", config.pingCount)
             .apply()
     }
+
+    fun loadTransport(): Transport = Transport.fromName(prefs.getString("transport", null))
+
+    fun saveTransport(transport: Transport) {
+        prefs.edit().putString("transport", transport.name).apply()
+    }
 }
 
 private fun TestResult.toJson(): JSONObject = JSONObject().apply {
     put("timestamp", timestamp)
-    put("ssid", ssid ?: JSONObject.NULL)
-    put("band", band ?: JSONObject.NULL)
-    put("rssiDbm", rssiDbm ?: JSONObject.NULL)
+    put("transport", transport.name)
+    put("networkLabel", networkLabel ?: JSONObject.NULL)
+    put("detail", detail ?: JSONObject.NULL)
+    put("signalDbm", signalDbm ?: JSONObject.NULL)
     put("linkSpeedMbps", linkSpeedMbps ?: JSONObject.NULL)
     put("downloadMbps", downloadMbps)
     put("uploadMbps", uploadMbps)
     put("pingMs", pingMs)
     put("jitterMs", jitterMs)
+    put("bytesUsed", bytesUsed)
 }
 
 private fun JSONObject.toResult(): TestResult = TestResult(
     timestamp = optLong("timestamp"),
-    ssid = optStringOrNull("ssid"),
-    band = optStringOrNull("band"),
-    rssiDbm = if (isNull("rssiDbm")) null else optInt("rssiDbm"),
-    linkSpeedMbps = if (isNull("linkSpeedMbps")) null else optInt("linkSpeedMbps"),
+    transport = Transport.fromName(optStringOrNull("transport")),
+    // "ssid"/"band"/"rssiDbm" are the pre-mobile-data key names; reading them
+    // keeps history written by an earlier build intact.
+    networkLabel = optStringOrNull("networkLabel") ?: optStringOrNull("ssid"),
+    detail = optStringOrNull("detail") ?: optStringOrNull("band"),
+    signalDbm = optIntOrNull("signalDbm") ?: optIntOrNull("rssiDbm"),
+    linkSpeedMbps = optIntOrNull("linkSpeedMbps"),
     downloadMbps = optDouble("downloadMbps", 0.0),
     uploadMbps = optDouble("uploadMbps", 0.0),
     pingMs = optDouble("pingMs", 0.0),
     jitterMs = optDouble("jitterMs", 0.0),
+    bytesUsed = optLong("bytesUsed", 0L),
 )
 
 private fun JSONObject.optStringOrNull(name: String): String? =
     if (isNull(name)) null else optString(name).takeIf { it.isNotEmpty() }
+
+private fun JSONObject.optIntOrNull(name: String): Int? =
+    if (isNull(name)) null else optInt(name)

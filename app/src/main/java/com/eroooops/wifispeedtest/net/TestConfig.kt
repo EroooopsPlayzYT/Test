@@ -40,5 +40,7 @@ data class TestUpdate(
     val pingMs: Double? = null,
     val jitterMs: Double? = null,
     val packetLossPct: Double? = null,
+    /** Bytes moved so far. Worth watching when the test runs on mobile data. */
+    val bytesUsed: Long = 0L,
     val error: String? = null,
 )
