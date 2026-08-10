@@ -12,13 +12,30 @@ android {
         applicationId = "com.eroooops.wifispeedtest"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
+    }
+
+    signingConfigs {
+        // A checked-in debug key, because CI runners start without one and AGP
+        // then generates a throwaway: every build came out with a different
+        // signature, so installing a new APK over an older one failed with
+        // "App not installed" and left people running stale code.
+        //
+        // This signs debug builds only and uses the well-known debug password.
+        // It is not a secret and must never be used for a release.
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
     }
 
     buildTypes {
         debug {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("debug")
         }
         release {
             isMinifyEnabled = false
