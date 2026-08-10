@@ -20,11 +20,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -52,7 +54,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.eroooops.wifispeedtest.cell.CellularStatus
 import com.eroooops.wifispeedtest.data.TestResult
 import com.eroooops.wifispeedtest.net.Phase
+import com.eroooops.wifispeedtest.net.TrafficProfile
 import com.eroooops.wifispeedtest.net.Transport
+import com.eroooops.wifispeedtest.BuildConfig
 import com.eroooops.wifispeedtest.wifi.WifiStatus
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -78,8 +82,22 @@ fun SpeedTestScreen(viewModel: SpeedTestViewModel) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Speed Test") },
+                title = {
+                    Column {
+                        Text("Speed Test")
+                        Text(
+                            // On screen deliberately: without it, a stale
+                            // install and a real bug are indistinguishable.
+                            text = "v${BuildConfig.VERSION_NAME} · build ${BuildConfig.VERSION_CODE}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                },
                 actions = {
+                    IconButton(onClick = viewModel::toggleDiagnostics) {
+                        Icon(Icons.Default.Info, contentDescription = "Diagnostics")
+                    }
                     IconButton(onClick = { showSettings = true }) {
                         Icon(Icons.Default.Settings, contentDescription = "Test settings")
                     }
@@ -121,6 +139,12 @@ fun SpeedTestScreen(viewModel: SpeedTestViewModel) {
                 )
             }
 
+            ProfileSelector(
+                selected = state.config.profile,
+                enabled = !state.running,
+                onSelect = viewModel::selectProfile,
+            )
+
             SpeedGauge(
                 mbps = gaugeValue(state),
                 caption = captionFor(state.phase),
@@ -136,6 +160,15 @@ fun SpeedTestScreen(viewModel: SpeedTestViewModel) {
                         .padding(horizontal = 32.dp, vertical = 8.dp),
                 )
             }
+
+            if (state.samples.size > 1) {
+                LiveChart(
+                    samples = state.samples,
+                    modifier = Modifier.padding(vertical = 8.dp),
+                )
+            }
+
+            ProfileOutcomeRow(state)
 
             if (state.bytesUsed > 0) {
                 Text(
@@ -212,6 +245,11 @@ fun SpeedTestScreen(viewModel: SpeedTestViewModel) {
                         modifier = Modifier.padding(16.dp),
                     )
                 }
+            }
+
+            if (state.showDiagnostics || state.phase == Phase.PROBE || state.error != null) {
+                Spacer(Modifier.height(12.dp))
+                DiagnosticsPanel(probes = state.probes)
             }
 
             HistorySection(
@@ -639,3 +677,81 @@ private fun HistoryRow(result: TestResult) {
         }
     }
 }
+
+/** Picks how the link is loaded: bulk, or one of the simulated traffic shapes. */
+@Composable
+private fun ProfileSelector(
+    selected: TrafficProfile,
+    enabled: Boolean,
+    onSelect: (TrafficProfile) -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            TrafficProfile.entries.forEach { profile ->
+                FilterChip(
+                    selected = profile == selected,
+                    onClick = { onSelect(profile) },
+                    enabled = enabled,
+                    label = {
+                        Text(
+                            text = profile.label,
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                    },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+        Text(
+            text = selected.blurb,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 6.dp),
+        )
+    }
+}
+
+/** Findings a single Mbps figure cannot carry: video rung, burst time, bufferbloat. */
+@Composable
+private fun ProfileOutcomeRow(state: UiState) {
+    val outcome = state.outcome
+    if (outcome.isEmpty) return
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            outcome.sustainedQuality?.let {
+                InfoCell("Sustains", it, "video quality", Modifier.weight(1f))
+            }
+            outcome.burstMillis?.let {
+                InfoCell(
+                    "Page burst",
+                    String.format(java.util.Locale.getDefault(), "%.0f ms", it),
+                    "$BROWSE_ASSET_COUNT requests",
+                    Modifier.weight(1f),
+                )
+            }
+            outcome.idleLatencyMs?.let {
+                InfoCell("Idle", formatMillis(it), "latency", Modifier.weight(1f))
+            }
+            outcome.loadedLatencyMs?.let {
+                InfoCell("Loaded", formatMillis(it), outcome.bloatGrade, Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+private const val BROWSE_ASSET_COUNT = 16

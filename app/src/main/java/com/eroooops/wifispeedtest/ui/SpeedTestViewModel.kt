@@ -14,6 +14,9 @@ import com.eroooops.wifispeedtest.net.Phase
 import com.eroooops.wifispeedtest.net.SpeedTestEngine
 import com.eroooops.wifispeedtest.net.TestConfig
 import com.eroooops.wifispeedtest.net.TestUpdate
+import com.eroooops.wifispeedtest.net.ProbeResult
+import com.eroooops.wifispeedtest.net.ProfileOutcome
+import com.eroooops.wifispeedtest.net.TrafficProfile
 import com.eroooops.wifispeedtest.net.Transport
 import com.eroooops.wifispeedtest.wifi.WifiInfoProvider
 import com.eroooops.wifispeedtest.wifi.WifiStatus
@@ -38,6 +41,10 @@ data class UiState(
     val bytesUsed: Long = 0L,
     val server: String? = null,
     val notice: String? = null,
+    val samples: List<Double> = emptyList(),
+    val probes: List<ProbeResult> = emptyList(),
+    val outcome: ProfileOutcome = ProfileOutcome(),
+    val showDiagnostics: Boolean = false,
     val error: String? = null,
     val config: TestConfig = TestConfig(),
     val history: List<TestResult> = emptyList(),
@@ -100,6 +107,9 @@ class SpeedTestViewModel(application: Application) : AndroidViewModel(applicatio
             bytesUsed = 0L,
             server = null,
             notice = null,
+            samples = emptyList(),
+            probes = emptyList(),
+            outcome = ProfileOutcome(),
             error = null,
         )
     }
@@ -119,6 +129,9 @@ class SpeedTestViewModel(application: Application) : AndroidViewModel(applicatio
             bytesUsed = 0L,
             server = null,
             notice = null,
+            samples = emptyList(),
+            probes = emptyList(),
+            outcome = ProfileOutcome(),
             error = null,
         )
 
@@ -177,6 +190,15 @@ class SpeedTestViewModel(application: Application) : AndroidViewModel(applicatio
         _state.value = _state.value.copy(config = config)
     }
 
+    fun selectProfile(profile: TrafficProfile) {
+        if (_state.value.running) return
+        updateConfig(_state.value.config.copy(profile = profile))
+    }
+
+    fun toggleDiagnostics() {
+        _state.value = _state.value.copy(showDiagnostics = !_state.value.showDiagnostics)
+    }
+
     fun clearHistory() {
         store.save(emptyList())
         _state.value = _state.value.copy(history = emptyList())
@@ -195,6 +217,9 @@ class SpeedTestViewModel(application: Application) : AndroidViewModel(applicatio
             bytesUsed = maxOf(update.bytesUsed, _state.value.bytesUsed),
             server = update.server ?: _state.value.server,
             notice = update.notice ?: _state.value.notice,
+            samples = update.samples,
+            probes = update.probes.ifEmpty { _state.value.probes },
+            outcome = update.outcome,
             error = update.error,
         )
     }

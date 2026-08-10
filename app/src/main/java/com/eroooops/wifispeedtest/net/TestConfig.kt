@@ -16,6 +16,7 @@ data class TestConfig(
     val downloadSeconds: Int = 10,
     val uploadSeconds: Int = 10,
     val pingCount: Int = 10,
+    val profile: TrafficProfile = TrafficProfile.BULK,
 ) {
     /**
      * True while the URLs are untouched, which is when falling back is safe.
@@ -60,5 +61,11 @@ data class TestUpdate(
     val server: String? = null,
     /** Non-fatal information, e.g. that upload had to be skipped. */
     val notice: String? = null,
+    /** Rolling throughput samples for the live chart, oldest first. */
+    val samples: List<Double> = emptyList(),
+    /** Per-server probe detail, live during [Phase.PROBE]. */
+    val probes: List<ProbeResult> = emptyList(),
+    /** Findings specific to the traffic profile in use. */
+    val outcome: ProfileOutcome = ProfileOutcome(),
     val error: String? = null,
 )

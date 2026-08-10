@@ -33,6 +33,11 @@ private const val PING_TIMEOUT_MS = 4_000
 private const val PROBE_TIMEOUT_MS = 5_000
 private const val PROBE_CONCURRENCY = 5
 private const val PROBE_UPLOAD_BYTES = 128 * 1024
+private const val MAX_SAMPLES = 120
+private const val BROWSE_ASSETS = 16
+private const val BROWSE_ASSET_BYTES = 48L * 1024
+private const val BROWSE_IDLE_MS = 400L
+private const val IDLE_SAMPLES = 5
 
 /**
  * Runs a ping / download / upload test and reports progress as a flow.
@@ -56,9 +61,26 @@ class SpeedTestEngine(private val network: Network?) {
 
         try {
             // --- Pick a server that actually answers -------------------------
-            emit { it.copy(phase = Phase.PROBE, phaseProgress = 0f) }
-            val selection = selectEndpoint(candidates) { done ->
-                emit { it.copy(phaseProgress = done.toFloat() / candidates.size) }
+            emit {
+                it.copy(
+                    phase = Phase.PROBE,
+                    phaseProgress = 0f,
+                    probes = candidates.map { candidate ->
+                        ProbeResult(
+                            name = candidate.name,
+                            host = URL(candidate.downloadUrl).host,
+                            scheme = URL(candidate.downloadUrl).protocol,
+                        )
+                    },
+                )
+            }
+            val selection = selectEndpoint(candidates) { done, live ->
+                emit {
+                    it.copy(
+                        phaseProgress = done.toFloat() / candidates.size,
+                        probes = live,
+                    )
+                }
             }
 
             val chosen = selection.download
@@ -93,8 +115,21 @@ class SpeedTestEngine(private val network: Network?) {
                 throw IOException("No response from ${downloadUrl.host}")
             }
 
+            // --- Simulated profiles -------------------------------------------
+            if (!config.profile.isBulk) {
+                runProfile(config, downloadUrl) { transform -> emit(transform) }
+                return@channelFlow
+            }
+
             // --- Download ----------------------------------------------------
-            emit { it.copy(phase = Phase.DOWNLOAD, phaseProgress = 0f, instantMbps = 0.0) }
+            emit {
+                it.copy(
+                    phase = Phase.DOWNLOAD,
+                    phaseProgress = 0f,
+                    instantMbps = 0.0,
+                    samples = emptyList(),
+                )
+            }
             val download = measureThroughput(
                 label = "Download",
                 seconds = config.downloadSeconds,
@@ -107,6 +142,7 @@ class SpeedTestEngine(private val network: Network?) {
                             instantMbps = instant,
                             downloadMbps = average,
                             bytesUsed = bytes,
+                            samples = (it.samples + instant).takeLast(MAX_SAMPLES),
                         )
                     }
                 },
@@ -129,7 +165,14 @@ class SpeedTestEngine(private val network: Network?) {
             val upload = if (uploadTarget == null) {
                 null
             } else {
-                emit { it.copy(phase = Phase.UPLOAD, phaseProgress = 0f, instantMbps = 0.0) }
+                emit {
+                    it.copy(
+                        phase = Phase.UPLOAD,
+                        phaseProgress = 0f,
+                        instantMbps = 0.0,
+                        samples = emptyList(),
+                    )
+                }
                 val uploadUrl = URL(uploadTarget)
                 measureThroughput(
                     label = "Upload",
@@ -143,6 +186,7 @@ class SpeedTestEngine(private val network: Network?) {
                                 instantMbps = instant,
                                 uploadMbps = average,
                                 bytesUsed = download.bytes + bytes,
+                                samples = (it.samples + instant).takeLast(MAX_SAMPLES),
                             )
                         }
                     },
@@ -175,12 +219,284 @@ class SpeedTestEngine(private val network: Network?) {
         }
     }
 
+    /** Drives whichever non-bulk profile was chosen and finishes the run. */
+    private suspend fun runProfile(
+        config: TestConfig,
+        downloadUrl: URL,
+        emit: suspend ((TestUpdate) -> TestUpdate) -> Unit,
+    ) {
+        emit {
+            it.copy(
+                phase = Phase.DOWNLOAD,
+                phaseProgress = 0f,
+                instantMbps = 0.0,
+                samples = emptyList(),
+            )
+        }
+
+        when (config.profile) {
+            TrafficProfile.STREAM -> {
+                val (quality, bytes) = measureStream(
+                    downloadUrl,
+                    config.downloadSeconds,
+                ) { progress, instant, rung ->
+                    emit {
+                        it.copy(
+                            phaseProgress = progress,
+                            instantMbps = instant,
+                            bytesUsed = it.bytesUsed + 0,
+                            samples = (it.samples + instant).takeLast(MAX_SAMPLES),
+                            outcome = it.outcome.copy(sustainedQuality = rung),
+                        )
+                    }
+                }
+                emit {
+                    it.copy(
+                        phase = Phase.DONE,
+                        phaseProgress = 1f,
+                        instantMbps = 0.0,
+                        bytesUsed = bytes,
+                        downloadMbps = it.samples.maxOrNull() ?: 0.0,
+                        outcome = it.outcome.copy(sustainedQuality = quality),
+                    )
+                }
+            }
+
+            TrafficProfile.BROWSE -> {
+                val (median, bytes) = measureBrowse(
+                    downloadUrl,
+                    config.downloadSeconds,
+                ) { progress, instant, burstMs ->
+                    emit {
+                        it.copy(
+                            phaseProgress = progress,
+                            instantMbps = instant,
+                            samples = (it.samples + instant).takeLast(MAX_SAMPLES),
+                            outcome = it.outcome.copy(burstMillis = burstMs),
+                        )
+                    }
+                }
+                emit {
+                    it.copy(
+                        phase = Phase.DONE,
+                        phaseProgress = 1f,
+                        instantMbps = 0.0,
+                        bytesUsed = bytes,
+                        downloadMbps = it.samples.maxOrNull() ?: 0.0,
+                        outcome = it.outcome.copy(burstMillis = median),
+                    )
+                }
+            }
+
+            TrafficProfile.RESPONSIVENESS -> {
+                val (idle, loaded, bytes) = measureResponsiveness(
+                    downloadUrl,
+                    config.downloadSeconds,
+                    config.connections,
+                ) { progress, instant, latency ->
+                    emit {
+                        it.copy(
+                            phaseProgress = progress,
+                            instantMbps = instant,
+                            samples = (it.samples + instant).takeLast(MAX_SAMPLES),
+                            outcome = it.outcome.copy(loadedLatencyMs = latency),
+                        )
+                    }
+                }
+                emit {
+                    it.copy(
+                        phase = Phase.DONE,
+                        phaseProgress = 1f,
+                        instantMbps = 0.0,
+                        bytesUsed = bytes,
+                        downloadMbps = it.samples.maxOrNull() ?: 0.0,
+                        outcome = it.outcome.copy(
+                            idleLatencyMs = idle,
+                            loadedLatencyMs = loaded,
+                        ),
+                    )
+                }
+            }
+
+            TrafficProfile.BULK -> Unit
+        }
+    }
+
+    // -- simulated traffic ---------------------------------------------------
+
+    /**
+     * Climbs a bitrate ladder, holding each rung for a couple of segments.
+     *
+     * A player asks for a fixed slice of video on a clock and must have it
+     * before playback reaches it. So the question is not "how fast" but "did
+     * this segment arrive in time", and the answer is the highest rung where it
+     * kept doing so.
+     */
+    private suspend fun measureStream(
+        url: URL,
+        seconds: Int,
+        onSample: suspend (progress: Float, instantMbps: Double, rung: String) -> Unit,
+    ): Pair<String?, Long> {
+        val segmentSeconds = 2.0
+        val deadline = System.nanoTime() + seconds * 1_000_000_000L
+        var sustained: String? = null
+        var totalBytes = 0L
+
+        for ((quality, mbps) in BITRATE_LADDER) {
+            if (System.nanoTime() >= deadline) break
+            val segmentBytes = (mbps * 1_000_000 * segmentSeconds / 8).toLong()
+            var delivered = 0
+
+            repeat(2) {
+                if (System.nanoTime() >= deadline) return@repeat
+                val start = System.nanoTime()
+                val got = fetchRange(url, 0, segmentBytes - 1)
+                val tookSeconds = (System.nanoTime() - start) / 1e9
+                totalBytes += got
+
+                if (got >= segmentBytes / 2 && tookSeconds <= segmentSeconds) delivered++
+
+                val instant = if (tookSeconds > 0) got * 8.0 / tookSeconds / 1e6 else 0.0
+                val progress = 1f - ((deadline - System.nanoTime()).toFloat() /
+                    (seconds * 1_000_000_000L))
+                onSample(progress.coerceIn(0f, 1f), instant, quality)
+            }
+
+            // Both segments on time means the link genuinely holds this rung.
+            if (delivered == 2) sustained = quality else break
+        }
+        return sustained to totalBytes
+    }
+
+    /**
+     * Fires bursts of small parallel requests, the shape of a page load.
+     *
+     * Bandwidth barely matters here; round trips do. Returns the median burst
+     * duration, which is what "feels slow" actually measures.
+     */
+    private suspend fun measureBrowse(
+        url: URL,
+        seconds: Int,
+        onSample: suspend (progress: Float, instantMbps: Double, burstMs: Double) -> Unit,
+    ): Pair<Double?, Long> = coroutineScope {
+        val start = System.nanoTime()
+        val deadline = start + seconds * 1_000_000_000L
+        val durations = mutableListOf<Double>()
+        var totalBytes = 0L
+
+        while (System.nanoTime() < deadline && coroutineContext.isActive) {
+            val burstStart = System.nanoTime()
+            val assets = (0 until BROWSE_ASSETS).map { index ->
+                async(Dispatchers.IO) {
+                    val offset = index.toLong() * BROWSE_ASSET_BYTES
+                    fetchRange(url, offset, offset + BROWSE_ASSET_BYTES - 1)
+                }
+            }
+            val got = assets.sumOf { it.await() }
+            val tookMs = (System.nanoTime() - burstStart) / 1e6
+            totalBytes += got
+            durations += tookMs
+
+            val instant = if (tookMs > 0) got * 8.0 / (tookMs / 1000) / 1e6 else 0.0
+            val progress = ((System.nanoTime() - start).toFloat() /
+                (seconds * 1_000_000_000L)).coerceIn(0f, 1f)
+            onSample(progress, instant, tookMs)
+
+            delay(BROWSE_IDLE_MS)
+        }
+
+        val median = durations.sorted().takeIf { it.isNotEmpty() }?.let { it[it.size / 2] }
+        median to totalBytes
+    }
+
+    /**
+     * Measures latency while the link is saturated.
+     *
+     * The gap between idle and loaded latency is bufferbloat: a queue somewhere
+     * absorbing the flood and delaying everything behind it. It is why a call
+     * falls apart while something downloads, and a bulk test cannot see it.
+     */
+    private suspend fun measureResponsiveness(
+        url: URL,
+        seconds: Int,
+        connections: Int,
+        onSample: suspend (progress: Float, instantMbps: Double, latencyMs: Double) -> Unit,
+    ): Triple<Double?, Double?, Long> = coroutineScope {
+        val port = if (url.port != -1) url.port else url.defaultPort
+        val address = withContext(Dispatchers.IO) {
+            network?.getByName(url.host) ?: InetAddress.getByName(url.host)
+        }
+
+        // Baseline first, with nothing else running.
+        val idle = (1..IDLE_SAMPLES).mapNotNull { tcpHandshakeMs(address, port) }
+            .takeIf { it.isNotEmpty() }?.average()
+
+        val counter = AtomicLong()
+        val failure = AtomicReference<String?>(null)
+        val start = System.nanoTime()
+        val deadline = start + seconds * 1_000_000_000L
+        val loaders = List(connections) {
+            launch(Dispatchers.IO) { downloadWorker(url, deadline, counter, failure) }
+        }
+
+        val loaded = mutableListOf<Double>()
+        var windowBytes = 0L
+        var windowAt = start
+
+        while (System.nanoTime() < deadline && coroutineContext.isActive) {
+            val rtt = tcpHandshakeMs(address, port)
+            if (rtt != null) loaded += rtt
+
+            val now = System.nanoTime()
+            val bytes = counter.get()
+            val instant = mbps(bytes - windowBytes, now - windowAt)
+            windowBytes = bytes
+            windowAt = now
+
+            val progress = ((now - start).toFloat() / (seconds * 1_000_000_000L)).coerceIn(0f, 1f)
+            onSample(progress, instant, rtt ?: 0.0)
+            delay(150)
+        }
+
+        loaders.forEach { it.cancel() }
+        loaders.joinAll()
+
+        Triple(idle, loaded.takeIf { it.isNotEmpty() }?.average(), counter.get())
+    }
+
+    /** One ranged GET, returning how many bytes actually arrived. */
+    private suspend fun fetchRange(url: URL, from: Long, to: Long): Long =
+        withContext(Dispatchers.IO) {
+            var connection: HttpURLConnection? = null
+            try {
+                connection = open(url, "GET").apply {
+                    setRequestProperty("Range", "bytes=$from-$to")
+                }
+                if (connection.responseCode !in 200..299) return@withContext 0L
+                val buffer = ByteArray(BUFFER_BYTES)
+                var total = 0L
+                connection.inputStream.use { input ->
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read <= 0) break
+                        total += read
+                    }
+                }
+                total
+            } catch (error: IOException) {
+                0L
+            } finally {
+                runCatching { connection?.disconnect() }
+            }
+        }
+
     // -- server selection ----------------------------------------------------
 
     private data class Selection(
         val download: Endpoint? = null,
         val upload: String? = null,
         val failures: List<Pair<String, String>> = emptyList(),
+        val probes: List<ProbeResult> = emptyList(),
     ) {
         /** Names the first few casualties; twenty reasons would not fit on screen. */
         fun describeFailure(): String {
@@ -201,8 +517,17 @@ class SpeedTestEngine(private val network: Network?) {
      */
     private suspend fun selectEndpoint(
         candidates: List<Endpoint>,
-        onProgress: suspend (done: Int) -> Unit,
+        onProgress: suspend (done: Int, live: List<ProbeResult>) -> Unit,
     ): Selection = coroutineScope {
+        val prober = Prober(network)
+        val live = candidates.map { candidate ->
+            ProbeResult(
+                name = candidate.name,
+                host = URL(candidate.downloadUrl).host,
+                scheme = URL(candidate.downloadUrl).protocol,
+            )
+        }.toMutableList()
+
         val failures = mutableListOf<Pair<String, String>>()
         var chosen: Endpoint? = null
         var probed = 0
@@ -212,22 +537,37 @@ class SpeedTestEngine(private val network: Network?) {
         // staring at a spinner. Preference order is still honoured, because the
         // winner is the earliest survivor within a batch, and later batches only
         // run if the whole batch before them failed.
-        for (batch in candidates.chunked(PROBE_CONCURRENCY)) {
+        for (batch in candidates.chunked(PROBE_CONCURRENCY).map { it.toList() }) {
+            val offset = probed
+            batch.indices.forEach { i ->
+                live[offset + i] = live[offset + i].copy(state = ProbeState.RUNNING)
+            }
+            onProgress(probed, live.toList())
+
             val results = batch
-                .map { candidate -> candidate to async { probeDownload(candidate.downloadUrl) } }
+                .map { candidate ->
+                    candidate to async {
+                        prober.probe(candidate.name, candidate.downloadUrl, PROBE_TIMEOUT_MS)
+                    }
+                }
                 .map { (candidate, deferred) -> candidate to deferred.await() }
 
-            probed += batch.size
-            onProgress(probed)
-
-            results.forEach { (candidate, error) ->
-                if (error != null) failures += candidate.name to error
+            results.forEachIndexed { i, (candidate, result) ->
+                live[offset + i] = result
+                if (result.state != ProbeState.OK) {
+                    failures += candidate.name to (result.error ?: "unreachable")
+                }
             }
-            chosen = results.firstOrNull { (_, error) -> error == null }?.first
+
+            probed += batch.size
+            onProgress(probed, live.toList())
+
+            chosen = results.firstOrNull { (_, result) -> result.state == ProbeState.OK }?.first
             if (chosen != null) break
         }
 
-        val download = chosen ?: return@coroutineScope Selection(failures = failures)
+        val download = chosen
+            ?: return@coroutineScope Selection(failures = failures, probes = live.toList())
 
         // The chosen host's own upload endpoint first, then the shared list.
         val uploadCandidates = buildList {
@@ -236,28 +576,12 @@ class SpeedTestEngine(private val network: Network?) {
         }
         val upload = uploadCandidates.firstOrNull { probeUpload(it) == null }
 
-        Selection(download = download, upload = upload, failures = failures)
-    }
-
-    /** Returns null when the URL serves bytes, otherwise why it did not. */
-    private suspend fun probeDownload(url: String): String? = withContext(Dispatchers.IO) {
-        var connection: HttpURLConnection? = null
-        try {
-            connection = open(URL(url), "GET").apply {
-                connectTimeout = PROBE_TIMEOUT_MS
-                readTimeout = PROBE_TIMEOUT_MS
-            }
-            val status = connection.responseCode
-            if (status !in 200..299) return@withContext "HTTP $status"
-            val read = connection.inputStream.use { it.read(ByteArray(8 * 1024)) }
-            if (read <= 0) "empty response" else null
-        } catch (error: IOException) {
-            error.describe()
-        } catch (error: SecurityException) {
-            error.describe()
-        } finally {
-            runCatching { connection?.disconnect() }
-        }
+        Selection(
+            download = download,
+            upload = upload,
+            failures = failures,
+            probes = live.toList(),
+        )
     }
 
     private suspend fun probeUpload(url: String): String? = withContext(Dispatchers.IO) {
