@@ -52,20 +52,33 @@ quiet:
 ## Server fallback
 
 A single hard-coded test server is a single point of failure. Some carriers
-filter by TLS server name, which means the TCP handshake succeeds and the
-request that follows is silently dropped — the ping phase passes and the
-download returns nothing, which looks exactly like a broken app.
+filter by TLS server name (SNI): the TCP handshake succeeds and the request that
+follows is silently dropped, so the ping phase passes and the download returns
+nothing — which looks exactly like a broken app rather than a blocked host.
 
-So each run begins by probing the built-in servers in order (Cloudflare,
-Hetzner, OVH, Tele2) and using the first that actually serves bytes. The probe
-pulls real payload rather than just opening a socket, because a connect-only
-check is what gets fooled by SNI filtering in the first place. The chosen server
-is shown under the gauge and stored with each history entry, since runs against
-different servers are not comparable.
+So each run begins by probing **twenty servers** across unrelated operators and
+countries, roughly ordered by distance from Europe, and uses the first that
+actually serves bytes. Two design points:
+
+- **The probe pulls real payload**, not just a socket connection. A connect-only
+  check is precisely what SNI filtering fools.
+- **About a third of the servers are plain HTTP.** An `http://` request carries
+  no SNI at all, so there is nothing for that class of block to match. This is
+  the practical answer to SNI filtering: Encrypted Client Hello would be the
+  principled one, but Android exposes no public API for setting an ECHConfig,
+  and static-file hosts do not offer ECH regardless.
+
+Probing runs five at a time. A blocked host costs a full timeout, and twenty of
+those in series would be two minutes of waiting; batching keeps it to seconds
+while still honouring preference order.
+
+The chosen server is shown under the gauge and stored with each history entry,
+since runs against different servers are not comparable.
 
 If no upload target is reachable, the test measures download only rather than
-failing outright. If none of them can be reached at all, the error names each
-server and why it failed.
+failing outright — public endpoints that accept a large POST are far rarer than
+ones that serve a file. If nothing at all can be reached, the error names the
+first few servers and why each was rejected.
 
 Fallback applies only while the URLs are untouched. Point the app at your own
 LAN box and it uses that or reports an error — silently hopping onto the

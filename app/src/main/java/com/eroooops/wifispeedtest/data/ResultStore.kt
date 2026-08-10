@@ -1,6 +1,7 @@
 package com.eroooops.wifispeedtest.data
 
 import android.content.Context
+import com.eroooops.wifispeedtest.net.Endpoints
 import com.eroooops.wifispeedtest.net.TestConfig
 import com.eroooops.wifispeedtest.net.Transport
 import org.json.JSONArray
@@ -55,8 +56,8 @@ class ResultStore(context: Context) {
 
     fun loadConfig(): TestConfig = with(prefs) {
         TestConfig(
-            downloadUrl = getString("downloadUrl", null) ?: TestConfig.DEFAULT_DOWNLOAD_URL,
-            uploadUrl = getString("uploadUrl", null) ?: TestConfig.DEFAULT_UPLOAD_URL,
+            downloadUrl = getString("downloadUrl", null).orCurrent(TestConfig.DEFAULT_DOWNLOAD_URL),
+            uploadUrl = getString("uploadUrl", null).orCurrent(TestConfig.DEFAULT_UPLOAD_URL),
             connections = getInt("connections", 4).coerceIn(TestConfig.CONNECTION_RANGE),
             downloadSeconds = getInt("downloadSeconds", 10).coerceIn(TestConfig.DURATION_RANGE),
             uploadSeconds = getInt("uploadSeconds", 10).coerceIn(TestConfig.DURATION_RANGE),
@@ -81,6 +82,14 @@ class ResultStore(context: Context) {
         prefs.edit().putString("transport", transport.name).apply()
     }
 }
+
+/**
+ * A stored URL that is really just a previous build's default is replaced with
+ * the current one, so the settings sheet does not show a server the app no
+ * longer uses.
+ */
+private fun String?.orCurrent(current: String): String =
+    if (this == null || isBlank() || this in Endpoints.LEGACY_DEFAULTS) current else this
 
 private fun TestResult.toJson(): JSONObject = JSONObject().apply {
     put("timestamp", timestamp)

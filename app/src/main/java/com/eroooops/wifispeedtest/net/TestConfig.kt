@@ -17,13 +17,23 @@ data class TestConfig(
     val uploadSeconds: Int = 10,
     val pingCount: Int = 10,
 ) {
-    /** True while the URLs are untouched, which is when falling back is safe. */
+    /**
+     * True while the URLs are untouched, which is when falling back is safe.
+     *
+     * A default shipped by an older build counts as untouched: it was never a
+     * deliberate choice, and treating it as one would pin an upgrading user to
+     * exactly the server the cascade exists to route around.
+     */
     val usesDefaultServer: Boolean
-        get() = downloadUrl == DEFAULT_DOWNLOAD_URL && uploadUrl == DEFAULT_UPLOAD_URL
+        get() = isDefaultish(downloadUrl, DEFAULT_DOWNLOAD_URL) &&
+            isDefaultish(uploadUrl, DEFAULT_UPLOAD_URL)
+
+    private fun isDefaultish(value: String, current: String): Boolean =
+        value.isBlank() || value == current || value in Endpoints.LEGACY_DEFAULTS
 
     companion object {
         val DEFAULT_DOWNLOAD_URL: String = Endpoints.DEFAULT.downloadUrl
-        val DEFAULT_UPLOAD_URL: String = Endpoints.DEFAULT.uploadUrl.orEmpty()
+        val DEFAULT_UPLOAD_URL: String = Endpoints.DEFAULT_UPLOAD
 
         val CONNECTION_RANGE = 1..8
         val DURATION_RANGE = 5..30

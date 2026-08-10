@@ -3,6 +3,7 @@ package com.eroooops.wifispeedtest.net
 import android.net.Network
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -29,7 +30,8 @@ private const val UPLOAD_REQUEST_BYTES = 64L * 1024 * 1024
 private const val CONNECT_TIMEOUT_MS = 10_000
 private const val READ_TIMEOUT_MS = 10_000
 private const val PING_TIMEOUT_MS = 4_000
-private const val PROBE_TIMEOUT_MS = 6_000
+private const val PROBE_TIMEOUT_MS = 5_000
+private const val PROBE_CONCURRENCY = 5
 private const val PROBE_UPLOAD_BYTES = 128 * 1024
 
 /**
@@ -60,10 +62,7 @@ class SpeedTestEngine(private val network: Network?) {
             }
 
             val chosen = selection.download
-                ?: throw IOException(
-                    "No test server could be reached. " +
-                        selection.failures.joinToString("; ") { (name, reason) -> "$name: $reason" }
-                )
+                ?: throw IOException(selection.describeFailure())
 
             val downloadUrl = URL(chosen.downloadUrl)
             val uploadTarget = selection.upload
@@ -182,7 +181,15 @@ class SpeedTestEngine(private val network: Network?) {
         val download: Endpoint? = null,
         val upload: String? = null,
         val failures: List<Pair<String, String>> = emptyList(),
-    )
+    ) {
+        /** Names the first few casualties; twenty reasons would not fit on screen. */
+        fun describeFailure(): String {
+            val shown = failures.take(4).joinToString("; ") { (name, reason) -> "$name: $reason" }
+            val rest = (failures.size - 4).coerceAtLeast(0)
+            return "None of the ${failures.size} test servers could be reached. " +
+                shown + if (rest > 0) "; and $rest more" else ""
+        }
+    }
 
     /**
      * Finds the first candidate that really serves bytes, then an upload target.
@@ -195,28 +202,41 @@ class SpeedTestEngine(private val network: Network?) {
     private suspend fun selectEndpoint(
         candidates: List<Endpoint>,
         onProgress: suspend (done: Int) -> Unit,
-    ): Selection {
+    ): Selection = coroutineScope {
         val failures = mutableListOf<Pair<String, String>>()
-        var download: Endpoint? = null
+        var chosen: Endpoint? = null
+        var probed = 0
 
-        candidates.forEachIndexed { index, candidate ->
-            if (download == null) {
-                val error = probeDownload(candidate.downloadUrl)
-                if (error == null) download = candidate else failures += candidate.name to error
+        // Probed a batch at a time rather than one by one: a blocked host costs
+        // a full timeout, and twenty of those in series is two minutes of
+        // staring at a spinner. Preference order is still honoured, because the
+        // winner is the earliest survivor within a batch, and later batches only
+        // run if the whole batch before them failed.
+        for (batch in candidates.chunked(PROBE_CONCURRENCY)) {
+            val results = batch
+                .map { candidate -> candidate to async { probeDownload(candidate.downloadUrl) } }
+                .map { (candidate, deferred) -> candidate to deferred.await() }
+
+            probed += batch.size
+            onProgress(probed)
+
+            results.forEach { (candidate, error) ->
+                if (error != null) failures += candidate.name to error
             }
-            onProgress(index + 1)
+            chosen = results.firstOrNull { (_, error) -> error == null }?.first
+            if (chosen != null) break
         }
 
-        val chosen = download ?: return Selection(failures = failures)
+        val download = chosen ?: return@coroutineScope Selection(failures = failures)
 
-        // Prefer the chosen host's own upload endpoint, then anyone else's.
+        // The chosen host's own upload endpoint first, then the shared list.
         val uploadCandidates = buildList {
-            chosen.uploadUrl?.let { add(it) }
-            candidates.mapNotNull { it.uploadUrl }.forEach { if (it !in this) add(it) }
+            download.uploadUrl?.let { add(it) }
+            Endpoints.UPLOAD_TARGETS.forEach { if (it !in this) add(it) }
         }
         val upload = uploadCandidates.firstOrNull { probeUpload(it) == null }
 
-        return Selection(download = chosen, upload = upload, failures = failures)
+        Selection(download = download, upload = upload, failures = failures)
     }
 
     /** Returns null when the URL serves bytes, otherwise why it did not. */
