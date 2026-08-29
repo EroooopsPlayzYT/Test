@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!--
+      Settings travel; recordings do not. A captured session is often hundreds
+      of megabytes and is tied to the device that made it, so backing it up
+      would be expensive and pointless.
+    -->
+    <include domain="sharedpref" path="." />
+    <exclude domain="file" path="recordings" />
+</full-backup-content>

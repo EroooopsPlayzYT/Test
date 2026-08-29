@@ -1,4 +1,4 @@
-name: Build APK
+name: Build APKs
 
 on:
   push:
@@ -21,12 +21,24 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build debug APK
+      # The beamforming maths lives in :core, a plain JVM module, specifically
+      # so it can be checked here without a device or an emulator.
+      - name: Run unit tests
+        run: ./gradlew test --stacktrace
+
+      - name: Build debug APKs
         run: ./gradlew assembleDebug --stacktrace
 
-      - name: Upload APK
+      - name: Upload Wi-Fi Speed Test APK
         uses: actions/upload-artifact@v4
         with:
           name: wifi-speed-test-debug
           path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+      - name: Upload Beamformer APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: beamformer-debug
+          path: beamformer/build/outputs/apk/debug/*.apk
           if-no-files-found: error

@@ -10,6 +10,15 @@ Pick the transport at the top of the screen. The status card and the recorded
 history follow the selection, so Wi-Fi and cellular runs stay comparable but
 never get confused for one another.
 
+## Also in this repo
+
+This repository now holds two independent Android apps, built with
+`:app`/`:beamformer` as separate Gradle modules so each installs on its own.
+The rest of this document covers Speed Test; the other is
+[**Beamformer**](beamformer/README.md) — a microphone beamforming and
+direction-finding app, with its beamforming maths in a plain-JVM
+[`:core`](core) module so it's unit tested without a device.
+
 ## What it measures
 
 | Metric | How |

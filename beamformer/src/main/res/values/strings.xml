@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Beamformer</string>
+    <string name="capture_notification_channel">Microphone capture</string>
+    <string name="capture_notification_title">Beamformer is listening</string>
+</resources>
