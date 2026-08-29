@@ -20,5 +20,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "WiFi Speed Test"
+rootProject.name = "Test"
 include(":app")
+include(":core")
+include(":beamformer")
