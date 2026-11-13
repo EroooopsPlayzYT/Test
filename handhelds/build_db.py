@@ -4,9 +4,18 @@ import json
 import re
 import sqlite3
 from datetime import date
+from urllib.parse import quote_plus
 
 # Search results can pull in games, cases and accessories; keep only real consoles.
 HANDHELD_CATEGORIES = {"gameboy", "nintendo-switch", "telefon-oyun-konsolu"}
+
+# Keyword-search links so sahibinden can be browsed by hand (we never fetch it).
+SAHIBINDEN_SEARCH = "https://www.sahibinden.com/arama?query_text={q}"
+SAHIBINDEN_MODELS = [
+    "Steam Deck", "Steam Deck OLED", "ROG Ally", "ROG Ally X", "ROG Xbox Ally", "Legion Go",
+    "Legion Go S", "MSI Claw", "Ayaneo", "PlayStation Portal", "PSP", "PS Vita",
+    "Nintendo Switch", "Switch OLED", "Switch Lite", "Switch 2", "Nintendo 3DS", "Nintendo 2DS",
+    "Game Boy", "Anbernic", "Retroid Pocket", "Miyoo Mini", "Powkiddy", "R36S", "El Atarisi"]
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS handhelds (
@@ -48,6 +57,18 @@ CREATE TABLE IF NOT EXISTS reviews (
     text       TEXT       -- reviewer names intentionally not stored
 );
 CREATE INDEX IF NOT EXISTS idx_review_product ON reviews(akakce_id);
+CREATE TABLE IF NOT EXISTS sahibinden_listings (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    model     TEXT,
+    title     TEXT NOT NULL,   -- ad title as shown in web search results
+    price_try REAL,
+    location  TEXT,
+    url       TEXT UNIQUE      -- open manually; no seller info stored
+);
+CREATE TABLE IF NOT EXISTS sahibinden_searches (
+    model      TEXT PRIMARY KEY,
+    search_url TEXT NOT NULL   -- click to run sahibinden's own search
+);
 CREATE TABLE IF NOT EXISTS shop_products (
     id        INTEGER PRIMARY KEY AUTOINCREMENT,
     shop      TEXT NOT NULL,   -- domain scraped directly
@@ -95,6 +116,7 @@ def main():
     db = sqlite3.connect("handhelds.db")
     db.executescript("DROP VIEW IF EXISTS small_shop_offers; DROP TABLE IF EXISTS offers;"
                      "DROP TABLE IF EXISTS shop_products; DROP TABLE IF EXISTS reviews;"
+                     "DROP TABLE IF EXISTS sahibinden_listings; DROP TABLE IF EXISTS sahibinden_searches;"
                      "DROP TABLE IF EXISTS handhelds;" + SCHEMA)
     today = date.today().isoformat()
     db.executemany(
@@ -131,8 +153,18 @@ def main():
                               None if p.get("in_stock") is None else int(bool(p["in_stock"])), p["url"]))
     db.executemany("INSERT OR IGNORE INTO shop_products (shop, platform, title, brand, price_try, in_stock, url)"
                    " VALUES (?,?,?,?,?,?,?)", shop_rows)
+    for path in sorted(glob.glob("data/sahibinden_*.jsonl")):
+        for line in open(path, encoding="utf-8"):
+            s = json.loads(line)
+            if "sahibinden.com" not in (s.get("url") or ""):
+                continue
+            db.execute("INSERT OR IGNORE INTO sahibinden_listings (model, title, price_try, location, url)"
+                       " VALUES (?,?,?,?,?)", (s.get("model"), s["title"], s.get("price_try"),
+                                               s.get("snippet_location"), s["url"]))
+    db.executemany("INSERT INTO sahibinden_searches VALUES (?, ?)",
+                   [(m, SAHIBINDEN_SEARCH.format(q=quote_plus(m))) for m in SAHIBINDEN_MODELS])
     db.commit()
-    n_shop = db.execute("SELECT count(*) FROM shop_products").fetchone()[0]
+    n_shop =db.execute("SELECT count(*) FROM shop_products").fetchone()[0]
     print(f"{len(rows)} unique handhelds, {len(offers)} offers, {len(review_rows)} reviews, "
           f"{n_shop} small-shop products -> handhelds.db")
 
