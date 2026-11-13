@@ -82,7 +82,8 @@ CREATE INDEX idx_lu_model ON listings_unified(model, variant, effective_price_tr
 CREATE TABLE ml_metrics (name TEXT PRIMARY KEY, value TEXT, trained_at TEXT);
 CREATE VIEW listings_clean AS
     SELECT * FROM listings_unified
-    WHERE is_clone = 0 AND is_accessory = 0 AND wanted = 0 AND COALESCE(sold, 0) = 0;
+    WHERE is_clone = 0 AND is_accessory = 0 AND wanted = 0 AND COALESCE(sold, 0) = 0
+      AND model != 'Unknown';   -- neither catalogue nor classifier recognised it (books, toys...)
 CREATE VIEW priority_watchlist AS
     SELECT priority, model, variant, condition, sold, price_try, price_usd, ships_to_tr, landed_cost_try,
            effective_price_try, ROUND(fair_price) AS fair_price, ROUND(100 * deal_pct, 1) AS deal_percent,

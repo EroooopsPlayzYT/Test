@@ -65,3 +65,35 @@ class Categorising(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class JunkFilters(unittest.TestCase):
+    """Real titles that slipped into the data before; each must stay out."""
+
+    def test_not_handhelds(self):
+        for t in ["MOZDE Belmo Odin Oval Aynalı Kapaklı Lavabo Üstü Banyo Dolabı",   # bathroom cabinet
+                  "GPD Ritmo Tek Gövde Lavabo Bataryası",                            # faucet
+                  "İzoly Odin İ3 12100F 32Gb Ddr4 Ram 1Tb Nvme M.2 Ssd Rtx4060",     # desktop PC
+                  "DJI Osmo Pocket 4P Vlog Combo Gimbal",                             # camera gimbal
+                  "2 Adet Lav Odin Çay Seti 6 Kişilik",                               # tea set
+                  "Switch 2 pro kol",                                                 # controller
+                  "Nintendo Mariokart World Switch 2"]:                               # game
+            self.assertTrue(parse_title(t)["is_accessory"] or classify(t)[0] is None, t)
+
+    def test_books_are_not_ayn(self):
+        for t in ["Kedimin Adı Odin 2 - Kara Goblinler Kraliçesi", "Atlas Shrugged by Ayn Rand"]:
+            self.assertIsNone(classify(t)[0], t)
+
+    def test_clones_are_clones(self):
+        for t in ["Nessiworld Sup Mini Psp 400 Oyun Konsolu", "QASUL G9 3.0 İnç Ekran Oyun Konsolu",
+                  "Retro El Atarisi 3.5 Hd Ekran Psp Ps1 Mario Gta Fıfa Destekli 10.000 Oyun Konsolu",
+                  "Profesyone 5 Inc Full Hd Ekranlı 3D 20000 Oyunlu Joysticek RG50X Konsol"]:
+            self.assertEqual(classify(t)[0], "Retro clone", t)
+
+    def test_real_devices_survive(self):
+        cases = {"R36S 15000 Oyunlu Retro Konsol": "R36S", "Anbernic RG35XX Plus 5000 oyunlu": "Anbernic RG35XX",
+                 "Sony PSP 3004 Konsol": "PSP", "AYN Odin 2 Portal 8/128": "AYN Odin 2 Portal",
+                 "Odin 2 Mini 12GB 256GB": "AYN Odin 2 Mini", "Nintendo Switch 2 + Mario Kart World Bundle": "Nintendo Switch 2"}
+        for t, m in cases.items():
+            self.assertEqual(classify(t)[0], m, t)
+            self.assertFalse(parse_title(t)["is_accessory"], t)

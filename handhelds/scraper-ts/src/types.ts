@@ -19,9 +19,12 @@ export interface Adapter {
 
 const ACCESSORY = /kılıf|kilif|çanta|canta|koruyucu|temperli|\bcam\b|stand|şarj|sarj|kablo|adaptör|adaptor|joy-?con|kontrolc|oyun kolu|\bgrip\b|sticker|kaplama|\bdock\b|amiibo|hediye kart|\bcase\b|\bskin\b|silikon|thumb ?stick|analog (koruyucu|başlık)/i;
 
-/** True for consoles, false for cases, films, chargers, grips and other accessories. */
+const HANDHELD_CONTEXT = /konsol|console|handheld|oyun|game|retro|emülat|emulat|steam\s*deck|\bally\b|legion\s*go|\bclaw\b|ayaneo|\bodin\b|\bthor\b|\bayn\b.*(odin|thor|loki)|retroid|anbernic|\brg\s*-?\d|miyoo|powkiddy|trim\s*ui|r3[56]s|switch|portal|\bpsp\b|\bvita\b|\b[23]ds\b/i;
+const NOT_HANDHELD = /\bkitap|\bbook\b|novel|roman\b|rand\b|lavabo|banyo|musluk|batarya|bardak|mont\b|gimbal|\brtx\s*\d/i;
+
+/** True for consoles; false for accessories and for things that only share a word (books, faucets…). */
 export function isDevice(title: string): boolean {
-  return !ACCESSORY.test(title);
+  return !ACCESSORY.test(title) && HANDHELD_CONTEXT.test(title) && !NOT_HANDHELD.test(title);
 }
 
 /** "51.457,00 TL" | "51457.00" | 51457 -> 51457 */
