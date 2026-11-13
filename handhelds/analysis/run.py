@@ -32,6 +32,10 @@ SOURCES = [  # (source_table, source_kind, SQL -> title, price_try, price_usd, c
     ("used_listings", "classified",
      "SELECT title, price_try, NULL, 'used' || CASE WHEN sold THEN ' sold' ELSE '' END, source, url, scraped_at "
      "FROM used_listings"),
+    ("scraper_observations", "scraper",
+     "SELECT title, price_try, NULL, COALESCE(condition, '') || CASE WHEN in_stock = 0 THEN ' sold' ELSE '' END, "
+     "source || COALESCE('/' || seller, ''), url, scraped_at FROM scraper_observations "
+     "WHERE source NOT IN ('donanimhaber')"),   # forum rows already come via used_listings
     ("sahibinden_listings", "classified",
      "SELECT title, price_try, NULL, COALESCE(condition, 'used'), 'sahibinden', COALESCE(url, 'ilan ' || ilan_no), "
      "listed_date FROM sahibinden_listings WHERE kind = 'ad'"),

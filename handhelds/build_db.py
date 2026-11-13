@@ -184,6 +184,22 @@ def variant(title):
     return f"{r + 'GB' if r else '?'}/{m or '?'}" if (r or m) else None
 
 
+def load_scraper_observations(db, path="scraper-ts/out/prices.db"):
+    """Copy the TypeScript scraper's observations (every run, timestamped) into handhelds.db."""
+    import os
+    db.execute("DROP TABLE IF EXISTS scraper_observations")
+    db.execute("""CREATE TABLE scraper_observations (source TEXT, product_id TEXT, title TEXT, price_try REAL,
+                  in_stock INTEGER, seller TEXT, condition TEXT, url TEXT, query TEXT, scraped_at TEXT)""")
+    if not os.path.exists(path):
+        return
+    src = sqlite3.connect(path)
+    rows = src.execute("SELECT source, product_id, title, price_try, in_stock, seller, condition, url, query, "
+                       "scraped_at FROM observations").fetchall()
+    src.close()
+    db.executemany("INSERT INTO scraper_observations VALUES (?,?,?,?,?,?,?,?,?,?)", rows)
+    print(f"scraper_observations: {len(rows)} rows")
+
+
 def build_priority(db):
     db.executescript("""DROP TABLE IF EXISTS priority_watchlist;
     CREATE TABLE priority_watchlist (
@@ -320,6 +336,7 @@ def main():
     db.executemany("INSERT INTO sahibinden_searches VALUES (?, ?, ?)",
                    [(m, SAHIBINDEN_CATEGORIES.get(m), SAHIBINDEN_SEARCH.format(q=quote_plus(m)))
                     for m in SAHIBINDEN_MODELS])
+    load_scraper_observations(db)
     build_priority(db)
     db.commit()
     n_shop =db.execute("SELECT count(*) FROM shop_products").fetchone()[0]
