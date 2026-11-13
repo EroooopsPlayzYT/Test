@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS handhelds (
     category      TEXT,
     min_price_try REAL,
     offer_count   INTEGER,
+    rating_avg    REAL,
+    rating_count  INTEGER,
     url           TEXT,
     image         TEXT,
     sources       TEXT,
@@ -37,6 +39,15 @@ CREATE TABLE IF NOT EXISTS offers (
 );
 CREATE INDEX IF NOT EXISTS idx_offer_product ON offers(akakce_id);
 CREATE INDEX IF NOT EXISTS idx_offer_seller ON offers(seller);
+CREATE TABLE IF NOT EXISTS reviews (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    akakce_id  INTEGER NOT NULL REFERENCES handhelds(akakce_id),
+    comment_id INTEGER,
+    added      TEXT,
+    rating     INTEGER,   -- 1..5, NULL if the commenter gave no stars
+    text       TEXT       -- reviewer names intentionally not stored
+);
+CREATE INDEX IF NOT EXISTS idx_review_product ON reviews(akakce_id);
 CREATE TABLE IF NOT EXISTS shop_products (
     id        INTEGER PRIMARY KEY AUTOINCREMENT,
     shop      TEXT NOT NULL,   -- domain scraped directly
@@ -83,14 +94,27 @@ def main():
 
     db = sqlite3.connect("handhelds.db")
     db.executescript("DROP VIEW IF EXISTS small_shop_offers; DROP TABLE IF EXISTS offers;"
-                     "DROP TABLE IF EXISTS shop_products;"
+                     "DROP TABLE IF EXISTS shop_products; DROP TABLE IF EXISTS reviews;"
                      "DROP TABLE IF EXISTS handhelds;" + SCHEMA)
     today = date.today().isoformat()
     db.executemany(
-        "INSERT INTO handhelds VALUES (?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO handhelds VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
         [(r["akakce_id"], r["brand"], r["title"], r["category"], r["min_price_try"],
-          r["extra_offers"] + 1, r["url"], r["image"], ",".join(sorted(r["sources"])), today)
+          r["extra_offers"] + 1, None, None, r["url"], r["image"], ",".join(sorted(r["sources"])), today)
          for r in rows.values()])
+
+    review_rows = []
+    for path in sorted(glob.glob("data/reviews_*.jsonl")):
+        for line in open(path, encoding="utf-8"):
+            rec = json.loads(line)
+            if rec["akakce_id"] not in rows:
+                continue
+            db.execute("UPDATE handhelds SET rating_avg=?, rating_count=? WHERE akakce_id=?",
+                       (rec["rating_avg"], rec["rating_count"], rec["akakce_id"]))
+            review_rows += [(rec["akakce_id"], rv["comment_id"], rv["added"], rv["rating"], rv["text"])
+                            for rv in rec["reviews"]]
+    db.executemany("INSERT INTO reviews (akakce_id, comment_id, added, rating, text) VALUES (?,?,?,?,?)",
+                   review_rows)
     offers = []
     for path in sorted(glob.glob("data/offers_*.jsonl")):
         for line in open(path, encoding="utf-8"):
@@ -109,7 +133,8 @@ def main():
                    " VALUES (?,?,?,?,?,?,?)", shop_rows)
     db.commit()
     n_shop = db.execute("SELECT count(*) FROM shop_products").fetchone()[0]
-    print(f"{len(rows)} unique handhelds, {len(offers)} offers, {n_shop} small-shop products -> handhelds.db")
+    print(f"{len(rows)} unique handhelds, {len(offers)} offers, {len(review_rows)} reviews, "
+          f"{n_shop} small-shop products -> handhelds.db")
 
 
 if __name__ == "__main__":
