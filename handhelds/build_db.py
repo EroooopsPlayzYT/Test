@@ -9,8 +9,16 @@ from urllib.parse import quote_plus
 # Search results can pull in games, cases and accessories; keep only real consoles.
 HANDHELD_CATEGORIES = {"gameboy", "nintendo-switch", "telefon-oyun-konsolu"}
 
-# Keyword-search links so sahibinden can be browsed by hand (we never fetch it).
-SAHIBINDEN_SEARCH = "https://www.sahibinden.com/arama?query_text={q}"
+# Links so sahibinden can be browsed by hand (we never fetch it). Category slugs marked
+# verified were seen in web search results; the keyword URL pattern is a best guess.
+SAHIBINDEN_SEARCH = "https://www.sahibinden.com/oyun-konsol?query_text={q}"
+SAHIBINDEN_CATEGORIES = {
+    "MSI Claw": "https://www.sahibinden.com/oyunculara-ozel-oyun-konsolu-msi-claw",
+    "PlayStation Portal": "https://www.sahibinden.com/oyunculara-ozel-oyun-konsolu-playstation-portal",
+    "Switch 2": "https://www.sahibinden.com/oyunculara-ozel-oyun-konsolu-nintendo-switch-2",
+    "Retroid Pocket": "https://www.sahibinden.com/oyunculara-ozel-oyun-konsolu-retroid",
+    "PS Vita": "https://www.sahibinden.com/ps-vita",
+}
 SAHIBINDEN_MODELS = [
     "Steam Deck", "Steam Deck OLED", "ROG Ally", "ROG Ally X", "ROG Xbox Ally", "Legion Go",
     "Legion Go S", "MSI Claw", "Ayaneo", "PlayStation Portal", "PSP", "PS Vita",
@@ -60,14 +68,16 @@ CREATE INDEX IF NOT EXISTS idx_review_product ON reviews(akakce_id);
 CREATE TABLE IF NOT EXISTS sahibinden_listings (
     id        INTEGER PRIMARY KEY AUTOINCREMENT,
     model     TEXT,
+    kind      TEXT,            -- ad | store | category
     title     TEXT NOT NULL,   -- ad title as shown in web search results
     price_try REAL,
     location  TEXT,
     url       TEXT UNIQUE      -- open manually; no seller info stored
 );
 CREATE TABLE IF NOT EXISTS sahibinden_searches (
-    model      TEXT PRIMARY KEY,
-    search_url TEXT NOT NULL   -- click to run sahibinden's own search
+    model        TEXT PRIMARY KEY,
+    category_url TEXT,          -- verified category page (from search results), if known
+    search_url   TEXT NOT NULL  -- keyword search inside the console category
 );
 CREATE TABLE IF NOT EXISTS shop_products (
     id        INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -158,11 +168,12 @@ def main():
             s = json.loads(line)
             if "sahibinden.com" not in (s.get("url") or ""):
                 continue
-            db.execute("INSERT OR IGNORE INTO sahibinden_listings (model, title, price_try, location, url)"
-                       " VALUES (?,?,?,?,?)", (s.get("model"), s["title"], s.get("price_try"),
-                                               s.get("snippet_location"), s["url"]))
-    db.executemany("INSERT INTO sahibinden_searches VALUES (?, ?)",
-                   [(m, SAHIBINDEN_SEARCH.format(q=quote_plus(m))) for m in SAHIBINDEN_MODELS])
+            db.execute("INSERT OR IGNORE INTO sahibinden_listings (model, kind, title, price_try, location, url)"
+                       " VALUES (?,?,?,?,?,?)", (s.get("model"), s.get("kind", "ad"), s["title"],
+                                                 s.get("price_try"), s.get("snippet_location"), s["url"]))
+    db.executemany("INSERT INTO sahibinden_searches VALUES (?, ?, ?)",
+                   [(m, SAHIBINDEN_CATEGORIES.get(m), SAHIBINDEN_SEARCH.format(q=quote_plus(m)))
+                    for m in SAHIBINDEN_MODELS])
     db.commit()
     n_shop =db.execute("SELECT count(*) FROM shop_products").fetchone()[0]
     print(f"{len(rows)} unique handhelds, {len(offers)} offers, {len(review_rows)} reviews, "
