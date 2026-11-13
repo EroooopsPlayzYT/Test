@@ -9,6 +9,24 @@ if (process.env.HTTPS_PROXY || process.env.HTTP_PROXY) {
 
 export const USER_AGENT = "Mozilla/5.0 (compatible; handheld-price-notebook/1.0; personal use)";
 
+// ProductScrape's user_agent_list, refreshed to current browser versions. Opt-in with
+// UA_ROTATE=1 (or --ua-rotate). Rotation does NOT change the guardrails: robots.txt is
+// still honoured, per-host delays still apply, and a block still stops the source
+// (no retrying the same URL under another User-Agent).
+export const USER_AGENT_LIST = [
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:144.0) Gecko/20100101 Firefox/144.0",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:144.0) Gecko/20100101 Firefox/144.0",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36 Edg/141.0.0.0",
+];
+
+export function pickUserAgent(): string {
+  if (process.env.UA_ROTATE !== "1") return USER_AGENT;
+  return USER_AGENT_LIST[Math.floor(Math.random() * USER_AGENT_LIST.length)];   // random.choice()
+}
+
 /** The site refused us (403, captcha, Cloudflare/Akamai challenge). Never retried. */
 export class BlockedError extends Error {
   constructor(public url: string, public status: number, public reason: string) {
@@ -112,7 +130,7 @@ export async function fetchText(url: string, opts: FetchOptions = {}): Promise<s
     lastHit.set(u.host, Date.now());
     try {
       const res = await fetch(url, {
-        headers: { "User-Agent": USER_AGENT, "Accept-Language": "tr-TR,tr;q=0.9" },
+        headers: { "User-Agent": pickUserAgent(), "Accept-Language": "tr-TR,tr;q=0.9" },
         signal: AbortSignal.timeout(timeoutMs),
         redirect: "follow",
       });

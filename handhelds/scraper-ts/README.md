@@ -67,3 +67,37 @@ Blocked or disallowed sources are logged in the `runs` table (`blocked` / `robot
 Rows hold product, price, condition and shop names only. For forum and classified sources, no
 usernames, avatars, phone numbers or post bodies are stored. Instagram, Facebook and sahibinden
 are intentionally not supported (login walls / scraping bans / bot blocks).
+
+## Trendyol hybrid (ProductScrape `trendyol.py` + OmBayus/Trendyol-Web-Scraping)
+
+`src/hybrid/trendyol-hybrid.ts` combines both projects; nothing from either is dropped except OmBayus' email.
+
+```bash
+# ProductScrape flow: listing pages -> cards -> product pages (id) -> out/resultstrendyol.json
+npm run trendyol -- search -q "retroid pocket 6" -n 30            # HTTP mode
+npm run trendyol -- search -q "ayn odin" -n 30 --browser          # headless browser mode
+# OmBayus flow: watch product pages, alert when another seller is cheaper
+npm run trendyol -- track "https://www.trendyol.com/...-p-123" "https://...-p-456"   # every 30 min
+npm run trendyol -- track "<url>" --once --http                    # one check, plain requests
+```
+
+| Feature | From | Here |
+|---|---|---|
+| 24 cards/page, 208-page cap, `limit // 24` + remainder page | trendyol.py | `pagePlan()` |
+| Card selectors `p-card-wrppr`, `prdct-desc-cntnr-name[title]`, `prc-box-dscntd`; "Not available…" price | trendyol.py | `parseListing()` (+ JSON-LD / embedded-state fallback) |
+| Product page id = last word of `h1.pr-new-br` | trendyol.py | `parseProductPage()` |
+| Threads per product, `time.sleep(1)`, results file written as products finish | trendyol.py | bounded pool, 1 s sleep, `out/resultstrendyol.json` |
+| Headless browser, one tab per URL, `page.reload()` per check | OmBayus | Playwright (`--browser`, default for `track`) |
+| Click `.omc-mr-btn`, read `.prc-dsc` and `.mrc-new-prc span`, cheapest < yours | OmBayus | `checkPrice()` |
+| Cron schedule with run-on-init | OmBayus | `--cron`, default `0 */30 * * * *` (OmBayus' `* */30 * * * *` fired every second in minutes 0 and 30) |
+| Email via nodemailer + `.env` | OmBayus | **dropped**; alerts go to console, `alerts` table and `out/alerts.jsonl` |
+| `/sr` search | trendyol.py | robots-allowed category/brand pages instead |
+
+## User-Agent rotation (opt-in)
+
+`--ua-rotate` (or `UA_ROTATE=1`) picks a random browser User-Agent per request from a list, like
+ProductScrape's `user_agent_list`. robots.txt, per-host delays and stop-on-block still apply: a 403 or
+challenge is never retried under a different User-Agent.
+
+Credits: OmBayus/Trendyol-Web-Scraping © 2021 Omer Bayramcavus, MIT License. ProductScrape by
+muratcansarkalkan (used unmodified as a git submodule).

@@ -29,6 +29,15 @@ export function openDb(path: string): DatabaseSync {
       rows       INTEGER NOT NULL,
       started_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS alerts (          -- replaces OmBayus' email notification
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      url          TEXT NOT NULL,
+      title        TEXT,
+      your_price   REAL,
+      cheapest     REAL,
+      seller_prices TEXT,                          -- JSON array
+      checked_at   TEXT NOT NULL
+    );
     CREATE VIEW IF NOT EXISTS latest_prices AS
       SELECT o.* FROM observations o
       JOIN (SELECT source, product_id, seller, MAX(scraped_at) AS t
@@ -55,4 +64,10 @@ export function logRun(db: DatabaseSync, source: string, query: string, status: 
                        detail: string | null, rows: number, startedAt: string): void {
   db.prepare("INSERT INTO runs (source, query, status, detail, rows, started_at) VALUES (?,?,?,?,?,?)")
     .run(source, query, status, detail, rows, startedAt);
+}
+
+export function saveAlert(db: DatabaseSync, a: { url: string; title: string | null; yourPrice: number | null;
+                          cheapest: number | null; sellerPrices: number[]; checkedAt: string }): void {
+  db.prepare("INSERT INTO alerts (url, title, your_price, cheapest, seller_prices, checked_at) VALUES (?,?,?,?,?,?)")
+    .run(a.url, a.title, a.yourPrice, a.cheapest, JSON.stringify(a.sellerPrices), a.checkedAt);
 }
