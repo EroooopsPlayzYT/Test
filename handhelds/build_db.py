@@ -92,10 +92,12 @@ CREATE TABLE IF NOT EXISTS search_index_listings (
     model       TEXT,
     title       TEXT NOT NULL,
     price_try   REAL,           -- as shown in a search-engine snippet; may be stale
+    price_usd   REAL,           -- official store reference prices (goretroid, ayntec)
     offer_count INTEGER,
     in_stock    INTEGER,
     seen_date   TEXT,
-    url         TEXT UNIQUE     -- found via web search; the site itself was not fetched
+    url         TEXT,           -- found via web search; the site itself was not fetched
+    UNIQUE (url, title)         -- one page can list several variants
 );
 CREATE TABLE IF NOT EXISTS used_listings (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -133,17 +135,34 @@ def category(url):
 
 
 PRIORITY = [  # (model label, regex on lowercased title); first match wins, most specific first
+    # --- top: Retroid Pocket 6 (8GB / 12GB) ---
     ("Retroid Pocket 6", r"retroid\s*pocket\s*6|\brp\s*6\b"),
+    # --- AYN ---
     ("AYN Odin 3", r"odin\s*3"),
     ("AYN Odin 2 Portal", r"odin\s*2\s*portal"),
     ("AYN Odin 2 Mini", r"odin\s*2\s*mini"),
+    ("AYN Odin 2 Max", r"odin\s*2\s*max"),
     ("AYN Odin 2", r"odin\s*2"),
+    ("AYN Odin Lite", r"odin\s*lite"),
     ("AYN Thor", r"\bayn\b.*\bthor\b|\bthor\b.*\bayn\b"),
+    ("AYN Loki", r"\bayn\b.*\bloki\b|\bloki\b\s*(max|zero|mini)"),
     ("AYN Odin", r"\bodin\b"),
+    ("AYN (other)", r"\bayn\b|ayntec"),
+    # --- Retroid ---
     ("Retroid Pocket 5", r"retroid\s*pocket\s*5|\brp\s*5\b"),
+    ("Retroid Pocket Flip 2", r"retroid\s*pocket\s*flip\s*2|\brp\s*flip\s*2\b"),
+    ("Retroid Pocket Flip", r"retroid\s*pocket\s*flip"),
+    ("Retroid Pocket Mini V2", r"retroid\s*pocket\s*mini\s*v\s*2"),
     ("Retroid Pocket Mini", r"retroid\s*pocket\s*mini"),
-    ("Retroid Pocket Flip 2", r"retroid\s*pocket\s*flip\s*2"),
+    ("Retroid Pocket Classic", r"retroid\s*pocket\s*classic"),
+    ("Retroid Pocket 4 Pro", r"retroid\s*pocket\s*4\s*pro|\brp\s*4\s*pro\b"),
+    ("Retroid Pocket 4", r"retroid\s*pocket\s*4|\brp\s*4\b"),
+    ("Retroid Pocket 3+", r"retroid\s*pocket\s*3\s*(\+|plus)"),
+    ("Retroid Pocket 3", r"retroid\s*pocket\s*3"),
+    ("Retroid Pocket 2S", r"retroid\s*pocket\s*2\s*s"),
+    ("Retroid (other)", r"retroid"),
 ]
+PRIORITY_RANK = {m: i for i, (m, _) in enumerate(PRIORITY)}
 NOT_DEVICE = re.compile(r"kılıf|kilif|çanta|canta|koruyucu|temperli|\bcam\b|grip|stand|şarj|sarj|kablo|"
                         r"thumb|analog|sticker|kaplama|case|skin|film|dock|silikon", re.I)
 
@@ -165,27 +184,32 @@ def variant(title):
 def build_priority(db):
     db.executescript("""DROP TABLE IF EXISTS priority_watchlist;
     CREATE TABLE priority_watchlist (
-        model TEXT, variant TEXT, title TEXT, price_try REAL, condition TEXT,
+        priority INTEGER, model TEXT, variant TEXT, title TEXT, price_try REAL, price_usd REAL, condition TEXT,
         source_table TEXT, source TEXT, url TEXT, seen TEXT);""")
     queries = [
-        ("handhelds", "SELECT title, min_price_try, 'new', 'akakce', url, scraped_on FROM handhelds"),
-        ("offers", "SELECT h.title || ' [' || COALESCE(o.listing_title,'') || ']', o.price_try, 'new', "
+        ("handhelds", "SELECT title, min_price_try, NULL, 'new', 'akakce', url, scraped_on FROM handhelds"),
+        ("offers", "SELECT h.title || ' [' || COALESCE(o.listing_title,'') || ']', o.price_try, NULL, 'new', "
                    "COALESCE(o.marketplace || '/', '') || o.seller, h.url, h.scraped_on "
                    "FROM offers o JOIN handhelds h USING (akakce_id)"),
-        ("shop_products", "SELECT title, price_try, 'new', shop, url, NULL FROM shop_products"),
-        ("search_index_listings", "SELECT title, price_try, NULL, source, url, seen_date FROM search_index_listings"),
-        ("used_listings", "SELECT title, price_try, 'used' || CASE WHEN sold THEN ' (sold)' ELSE '' END, source, url, scraped_at FROM used_listings"),
-        ("sahibinden_listings", "SELECT title, price_try, condition, 'sahibinden', COALESCE(url, 'ilan ' || ilan_no), listed_date FROM sahibinden_listings WHERE kind='ad'"),
+        ("shop_products", "SELECT title, price_try, NULL, 'new', shop, url, NULL FROM shop_products"),
+        ("search_index_listings", "SELECT title, price_try, price_usd, NULL, source, url, seen_date FROM search_index_listings"),
+        ("used_listings", "SELECT title, price_try, NULL, 'used' || CASE WHEN sold THEN ' (sold)' ELSE '' END, source, url, scraped_at FROM used_listings"),
+        ("sahibinden_listings", "SELECT title, price_try, NULL, condition, 'sahibinden', COALESCE(url, 'ilan ' || ilan_no), listed_date FROM sahibinden_listings WHERE kind='ad'"),
     ]
     rows = []
     for table, q in queries:
-        for title, price, cond, source, url, seen in db.execute(q):
+        for title, price, usd, cond, source, url, seen in db.execute(q):
             low = (title or "").lower()
             model = next((m for m, rx in PRIORITY if re.search(rx, low)), None)
             if not model or NOT_DEVICE.search(low):
                 continue
-            rows.append((model, variant(title), title, price, cond, table, source, url, seen))
-    db.executemany("INSERT INTO priority_watchlist VALUES (?,?,?,?,?,?,?,?,?)", rows)
+            v = variant(title)
+            # 1 = RP6 8GB/12GB (what you're hunting), 2 = other RP6, 3+ = other AYN/Retroid by list order
+            prio = 1 if model == "Retroid Pocket 6" and v and v.split("/")[0] in ("8GB", "12GB") \
+                else 2 if model == "Retroid Pocket 6" else 3 + PRIORITY_RANK[model]
+            rows.append((prio, model, v, title, price, usd, cond, table, source, url, seen))
+    db.executemany("INSERT INTO priority_watchlist VALUES (?,?,?,?,?,?,?,?,?,?,?)", rows)
+    db.execute("CREATE INDEX idx_watch ON priority_watchlist(priority, price_try)")
     print(f"priority_watchlist: {len(rows)} rows")
 
 
@@ -273,9 +297,12 @@ def main():
                 continue
             s = json.loads(line)
             stock = s.get("in_stock")
-            db.execute("INSERT OR IGNORE INTO search_index_listings (source, model, title, price_try, offer_count,"
-                       " in_stock, seen_date, url) VALUES (?,?,?,?,?,?,?,?)",
-                       (s.get("source"), s.get("model"), s.get("title") or "", s.get("price_try"),
+            title = s.get("title") or ""
+            if s.get("variant") and s["variant"] not in title:
+                title = f"{title} [{s['variant']}]"
+            db.execute("INSERT OR IGNORE INTO search_index_listings (source, model, title, price_try, price_usd,"
+                       " offer_count, in_stock, seen_date, url) VALUES (?,?,?,?,?,?,?,?,?)",
+                       (s.get("source"), s.get("model"), title, s.get("price_try"), s.get("price_usd"),
                         s.get("offer_count"), None if stock is None else int(bool(stock)),
                         s.get("seen_date"), s.get("url")))
     for path in sorted(glob.glob("data/donanimhaber*.jsonl")):
