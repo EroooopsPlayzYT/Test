@@ -1,0 +1,12 @@
+trendyol|https://www.trendyol.com|https://www.trendyol.com/sr?q=steam%20deck
+hepsiburada|https://www.hepsiburada.com|https://www.hepsiburada.com/ara?q=steam+deck
+n11|https://www.n11.com|https://www.n11.com/arama?q=steam+deck
+amazon|https://www.amazon.com.tr|https://www.amazon.com.tr/s?k=steam+deck
+vatan|https://www.vatanbilgisayar.com|https://www.vatanbilgisayar.com/arama/steam%20deck/
+teknosa|https://www.teknosa.com|https://www.teknosa.com/arama/?s=steam+deck
+mediamarkt|https://www.mediamarkt.com.tr|https://www.mediamarkt.com.tr/tr/search.html?query=steam%20deck
+pttavm|https://www.pttavm.com|https://www.pttavm.com/arama?q=steam%20deck
+idefix|https://www.idefix.com|https://www.idefix.com/search?q=steam%20deck
+pazarama|https://www.pazarama.com|https://www.pazarama.com/arama?q=steam%20deck
+itopya|https://www.itopya.com|https://www.itopya.com/arama/?q=steam+deck
+incehesap|https://www.incehesap.com|https://www.incehesap.com/q/steam-deck/
