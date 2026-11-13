@@ -6,8 +6,11 @@ ACCESSORY = re.compile(
     r"thumb|analog\s*(başlık|koruyucu)|sticker|kaplama|\bcase\b|\bskin\b|film|\bdock\b|silikon|joy-?con|"
     r"kontrolc|oyun\s*kolu|amiibo|hediye\s*kart|yedek\s*parça|batarya\b|tuş\s*takımı|sadece\s*kılıf", re.I)
 GAME = re.compile(r"\boyunu\b|\bswitch\s*oyun\b|\bps5\b.*oyun|edition\b(?!.*konsol)", re.I)
-USED = re.compile(r"ikinci\s*el|2\.\s*el|\bused\b|az\s*kullan|temiz|kullanılmış|kullanilmis|sıfır\s*ayarında", re.I)
+USED = re.compile(r"ikinci\s*el|2\.\s*el|\bused\b|az\s*kullan|temiz|kullanılmış|kullanilmis|"
+                  r"s[ıi]f[ıi]r\s*(ayar|gibi)", re.I)
 NEW = re.compile(r"\bsıfır\b(?!\s*ayar)|\bsifir\b(?!\s*ayar)|kapalı\s*kutu|\bnew\b|faturalı|garantili", re.I)
+WANTED = re.compile(r"al[ıi]n[ıi]k|al[ıi]n[ıi]r\b|ar[ıi]yorum|aran[ıi]yor|\bwtb\b|almak\s*istiyorum", re.I)
+NEW_STRONG = re.compile(r"\bs[ıi]f[ıi]r\b(?!\s*(ayar|gibi))|kapal[ıi]\s*kutu|ac[ıi]lmam[ıi]ş|\bmühürlü\b|\bbrand\s*new\b", re.I)
 SOLD = re.compile(r"\bsatıldı\b|\bsatildi\b|\bsold\b", re.I)
 BUNDLE = re.compile(r"\+\s*\w*\s*oyun|bundle|\bset\b|hediye|\+\s*(sd|kart|çanta|kılıf)|full\s*set", re.I)
 
@@ -54,7 +57,13 @@ def variant_label(ram_gb, storage_gb):
 
 
 def condition(title, hint=None):
-    """'used' | 'new' | None. An explicit hint from the source (forum = used) wins."""
+    """'used' | 'new' | None.
+    The title wins over the source default: a forum post saying "SIFIR KAPALI KUTU" is new,
+    "sıfır ayarında" / "sıfır gibi" (like new) is used."""
+    if NEW_STRONG.search(title or ""):
+        return "new"
+    if USED.search(title or ""):
+        return "used"
     if hint:
         h = hint.lower()
         if "used" in h or "ikinci" in h:
@@ -78,4 +87,5 @@ def parse_title(title, condition_hint=None):
         "sold": bool(SOLD.search(title or "")) or ("sold" in (condition_hint or "").lower()),
         "bundle": bool(BUNDLE.search(title or "")),
         "is_accessory": bool(ACCESSORY.search(title or "")) or bool(GAME.search(title or "")),
+        "wanted": bool(WANTED.search(title or "")),       # "ALINIK ..." = someone looking to buy
     }

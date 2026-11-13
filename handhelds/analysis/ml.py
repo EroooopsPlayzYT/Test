@@ -24,7 +24,9 @@ NUM_FEATURES = ["ram_gb", "storage_gb"]
 
 def _frame(rows):
     cats = [[str(r.get(c)) for c in CAT_FEATURES] for r in rows]
-    nums = [[float(r.get(c) or 0) for c in NUM_FEATURES] for r in rows]
+    # log size, plus "is it known" flags: an unknown RAM must not look like a tiny RAM
+    nums = [[math.log1p(float(r.get(c) or 0)) for c in NUM_FEATURES]
+            + [1.0 if r.get(c) else 0.0 for c in NUM_FEATURES] for r in rows]
     return np.array(cats, dtype=object), np.array(nums, dtype=float)
 
 
@@ -37,13 +39,16 @@ class _Stack:
 
     def fit(self, rows, y):
         c, n = _frame(rows)
-        X = np.hstack([self.enc.fit_transform(c), np.log1p(n)])
-        self.est.fit(X, y)
+        oh = self.enc.fit_transform(c)
+        if isinstance(self.est, HistGradientBoostingRegressor):
+            # More RAM / storage can never lower the price (fixes RP6 12GB < 8GB).
+            self.est.set_params(monotonic_cst=[0] * oh.shape[1] + [1] * len(NUM_FEATURES) + [0] * len(NUM_FEATURES))
+        self.est.fit(np.hstack([oh, n]), y)
         return self
 
     def predict(self, rows):
         c, n = _frame(rows)
-        return self.est.predict(np.hstack([self.enc.transform(c), np.log1p(n)]))
+        return self.est.predict(np.hstack([self.enc.transform(c), n]))
 
     def get_params(self, deep=False):
         return {"estimator": self.est}
@@ -67,7 +72,9 @@ def train_price_model(rows):
     y = np.log(np.array([r["price_try"] for r in rows], dtype=float))
     candidates = {
         "ridge_onehot": lambda: _Stack(Ridge(alpha=1.0)),
-        "gradient_boosting": lambda: _Stack(HistGradientBoostingRegressor(max_iter=300, learning_rate=0.08,
+        # small leaves so rare models (RP3+, RP4 Pro, RP5…) get their own price instead of one shared value
+        "gradient_boosting": lambda: _Stack(HistGradientBoostingRegressor(max_iter=400, learning_rate=0.06,
+                                                                          min_samples_leaf=3, l2_regularization=0.5,
                                                                           random_state=7)),
     }
     scores = {name: _cv_mape(make, rows, y) for name, make in candidates.items()}
@@ -81,19 +88,26 @@ def predict_fair(model, rows):
 
 
 def train_title_classifier(titles, labels):
-    """Returns (pipeline, cv_accuracy)."""
+    """Returns (pipeline, metrics) with overall and per-class cross-validated accuracy."""
     pipe = make_pipeline(TfidfVectorizer(analyzer="char_wb", ngram_range=(2, 4), min_df=1),
                          LogisticRegression(max_iter=2000, C=4.0))
     n_classes = len(set(labels))
     if n_classes < 2:
         return None, None
     folds = min(5, min(labels.count(l) for l in set(labels)))
-    acc = None
+    metrics = None
     if folds >= 2:
         pred = cross_val_predict(pipe, titles, labels, cv=folds)
-        acc = float(np.mean([p == t for p, t in zip(pred, labels)]))
+        per_class = {}
+        for c in sorted(set(labels)):
+            idx = [i for i, t in enumerate(labels) if t == c]
+            per_class[c] = {"n": len(idx), "recall": round(float(np.mean([pred[i] == c for i in idx])), 3)}
+        overall = float(np.mean([p == t for p, t in zip(pred, labels)]))
+        metrics = {"accuracy": round(overall, 4),
+                   "balanced_accuracy": round(float(np.mean([v["recall"] for v in per_class.values()])), 4),
+                   "per_class": per_class}
     pipe.fit(titles, labels)
-    return pipe, acc
+    return pipe, metrics
 
 
 def classify_titles(pipe, titles, min_confidence=0.6):

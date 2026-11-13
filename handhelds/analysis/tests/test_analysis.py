@@ -42,6 +42,15 @@ class Parsing(unittest.TestCase):
         self.assertTrue(parse_title("[SATILDI] Steam Deck OLED")["sold"])
         self.assertTrue(parse_title("Nintendo Switch 2 + Mario Kart Bundle")["bundle"])
 
+    def test_reviewer_bugs(self):
+        # "SIFIR KAPALI KUTU" on a forum is new, not used
+        self.assertEqual(parse_title("##SATILIK## LEGION GO 2 - SIFIR - KAPALI KUTU", "used")["condition"], "new")
+        self.assertEqual(parse_title("SIFIR GİBİ NİNTENDO SWİTCH OLED", "used")["condition"], "used")
+        # want-to-buy posts are not listings
+        self.assertTrue(parse_title("ALINIK GBA SP")["wanted"])
+        self.assertTrue(parse_title("Retroid Pocket 6 arıyorum")["wanted"])
+        self.assertFalse(parse_title("Retroid Pocket 6 satılık")["wanted"])
+
 
 class Categorising(unittest.TestCase):
     def test_catalog(self):

@@ -62,7 +62,7 @@ CREATE INDEX IF NOT EXISTS idx_offer_seller ON offers(seller);
 CREATE TABLE IF NOT EXISTS reviews (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     akakce_id  INTEGER NOT NULL REFERENCES handhelds(akakce_id),
-    comment_id INTEGER,
+    comment_id INTEGER UNIQUE,  -- Akakce shows the same comment on related product pages
     added      TEXT,
     rating     INTEGER,   -- 1..5, NULL if the commenter gave no stars
     text       TEXT       -- reviewer names intentionally not stored
@@ -184,6 +184,21 @@ def variant(title):
     return f"{r + 'GB' if r else '?'}/{m or '?'}" if (r or m) else None
 
 
+def load_manual_listings(db, path="data/manual_listings.jsonl"):
+    """Listings reported by the user (or another agent) that the scrapers did not find."""
+    import os
+    db.execute("DROP TABLE IF EXISTS manual_listings")
+    db.execute("""CREATE TABLE manual_listings (title TEXT NOT NULL, price_try REAL, price_usd REAL, condition TEXT,
+                  location TEXT, source TEXT, url TEXT, seen TEXT, note TEXT)""")
+    if not os.path.exists(path):
+        return
+    rows = [json.loads(l) for l in open(path, encoding="utf-8") if l.strip()]
+    db.executemany("INSERT INTO manual_listings VALUES (?,?,?,?,?,?,?,?,?)",
+                   [(r["title"], r.get("price_try"), r.get("price_usd"), r.get("condition"), r.get("location"),
+                     r.get("source", "user-report"), r.get("url"), r.get("seen"), r.get("note")) for r in rows])
+    print(f"manual_listings: {len(rows)} rows")
+
+
 def load_scraper_observations(db, path="scraper-ts/out/prices.db"):
     """Copy the TypeScript scraper's observations (every run, timestamped) into handhelds.db."""
     import os
@@ -275,7 +290,7 @@ def main():
                        (rec["rating_avg"], rec["rating_count"], rec["akakce_id"]))
             review_rows += [(rec["akakce_id"], rv["comment_id"], rv["added"], rv["rating"], rv["text"])
                             for rv in rec["reviews"]]
-    db.executemany("INSERT INTO reviews (akakce_id, comment_id, added, rating, text) VALUES (?,?,?,?,?)",
+    db.executemany("INSERT OR IGNORE INTO reviews (akakce_id, comment_id, added, rating, text) VALUES (?,?,?,?,?)",
                    review_rows)
     offers = []
     for path in sorted(glob.glob("data/offers_*.jsonl")):
@@ -337,7 +352,8 @@ def main():
                    [(m, SAHIBINDEN_CATEGORIES.get(m), SAHIBINDEN_SEARCH.format(q=quote_plus(m)))
                     for m in SAHIBINDEN_MODELS])
     load_scraper_observations(db)
-    build_priority(db)
+    load_manual_listings(db)
+    # priority_watchlist is now a view built by analysis/run.py (one priority system)
     db.commit()
     n_shop =db.execute("SELECT count(*) FROM shop_products").fetchone()[0]
     print(f"{len(rows)} unique handhelds, {len(offers)} offers, {len(review_rows)} reviews, "
