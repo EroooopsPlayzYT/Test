@@ -11,6 +11,7 @@ USED = re.compile(r"ikinci\s*el|2\.\s*el|\bused\b|az\s*kullan|temiz|kullanılmı
 NEW = re.compile(r"\bsıfır\b(?!\s*ayar)|\bsifir\b(?!\s*ayar)|kapalı\s*kutu|\bnew\b|faturalı|garantili", re.I)
 NOT_HANDHELD = re.compile(r"lavabo|banyo|dolab[ıi]|mobilya|yatak|koltuk|masa\b|sandalye|halı|perde|ayakkab|"
                           r"musluk|eviye|batarya|duş\s*set|armatür|bardak|çay\s*seti|kitab[ıi]|roman\b|mont\b|"
+                          r"\brtx\s*\d|\bgtx\b|nvme|ddr[45]|oem\s*set|anakart|ekran\s*kart|masaüstü|kasa\b|"
                           r"elbise|tişört|parfüm|mutfak|tencere", re.I)
 WANTED = re.compile(r"al[ıi]n[ıi]k|al[ıi]n[ıi]r\b|ar[ıi]yorum|aran[ıi]yor|\bwtb\b|almak\s*istiyorum", re.I)
 NEW_STRONG = re.compile(r"\bs[ıi]f[ıi]r\b(?!\s*(ayar|gibi))|kapal[ıi]\s*kutu|ac[ıi]lmam[ıi]ş|\bmühürlü\b|\bbrand\s*new\b", re.I)

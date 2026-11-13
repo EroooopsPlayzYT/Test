@@ -28,7 +28,7 @@ CATALOG = [
     ("AYN Odin Lite", "AYN", ANDROID, r"^(?=.*(\bayn\b|ayntec|konsol|handheld|android|retro|emulat|snapdragon|\d+\s*gb)).*(odin\s*lite)", 3),
     ("AYN Thor", "AYN", ANDROID, r"\bayn\b.*\bthor\b|\bthor\b.*\bayn\b", 3),
     ("AYN Loki", "AYN", PC, r"\bloki\b", 3),
-    ("AYN Odin", "AYN", ANDROID, r"\bayn\b.*\bodin\b|\bodin\b.*\b(konsol|handheld|android|retro|oyun)", 3),
+    ("AYN Odin", "AYN", ANDROID, r"\bayn\b.*\bodin\b|\bodin\b.*\bayn\b", 3),
     # --- Retroid ---
     ("Retroid Pocket 5", "Retroid", ANDROID, r"retroid\s*pocket\s*5|\brp\s*5\b", 4),
     ("Retroid Pocket Flip 2", "Retroid", ANDROID, r"retroid\s*pocket\s*flip\s*2", 4),
