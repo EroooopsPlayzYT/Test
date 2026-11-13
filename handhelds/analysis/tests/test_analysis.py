@@ -77,7 +77,8 @@ class JunkFilters(unittest.TestCase):
                   "DJI Osmo Pocket 4P Vlog Combo Gimbal",                             # camera gimbal
                   "2 Adet Lav Odin Çay Seti 6 Kişilik",                               # tea set
                   "Switch 2 pro kol",                                                 # controller
-                  "Nintendo Mariokart World Switch 2"]:                               # game
+                  "Nintendo Mariokart World Switch 2",                                # game
+                  "Nintendo Switch - Mario Pop  Exclusive Series Gamepad"]:          # controller
             self.assertTrue(parse_title(t)["is_accessory"] or classify(t)[0] is None, t)
 
     def test_books_are_not_ayn(self):

@@ -4,7 +4,7 @@ import re
 ACCESSORY = re.compile(
     r"kılıf|kilif|çanta|canta|koruyucu|temperli|\bcam\b|\bgrip\b|stand|şarj|sarj|kablo|adaptör|adaptor|"
     r"thumb|analog\s*(başlık|koruyucu)|sticker|kaplama|\bcase\b|\bskin\b|film|\bdock\b|silikon|joy-?con|"
-    r"kontrolc|oyun\s*kolu|\bpro\s*kol\b|\bkol\b(?!.*konsol)|pro\s*controller|amiibo|hediye\s*kart|yedek\s*parça|batarya\b|tuş\s*takımı|sadece\s*kılıf", re.I)
+    r"kontrolc|oyun\s*kolu|switch.*gamepad(?!.*konsol)|gamepad.*switch(?!.*konsol)|\bpro\s*kol\b|\bkol\b(?!.*konsol)|pro\s*controller|amiibo|hediye\s*kart|yedek\s*parça|batarya\b|tuş\s*takımı|sadece\s*kılıf", re.I)
 GAME = re.compile(r"\boyunu\b|\bswitch\s*oyun\b|\bps5\b.*oyun|edition\b(?!.*konsol)|"
                   r"^(?!.*(konsol|console|bundle|\+|\bset\b|paket)).*\b(mario\s*kart|mariokart|zelda|pokemon|"
                   r"kirby|donkey\s*kong|smash|minecraft|metroid)\b", re.I)
