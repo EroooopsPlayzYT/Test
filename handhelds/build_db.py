@@ -6,10 +6,7 @@ import sqlite3
 from datetime import date
 
 # Search results can pull in games, cases and accessories; keep only real consoles.
-HANDHELD_CATEGORIES = {"gameboy", "oyun-konsolu"}
-HANDHELD_WORDS = re.compile(
-    r"switch|portal|steam deck|ally|legion go|claw|ayaneo|anbernic|retroid|miyoo|powkiddy|"
-    r"el konsol|el atari|gameboy|game boy|retro|psp|vita", re.I)
+HANDHELD_CATEGORIES = {"gameboy", "nintendo-switch", "telefon-oyun-konsolu"}
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS handhelds (
@@ -26,7 +23,26 @@ CREATE TABLE IF NOT EXISTS handhelds (
 );
 CREATE INDEX IF NOT EXISTS idx_brand ON handhelds(brand);
 CREATE INDEX IF NOT EXISTS idx_price ON handhelds(min_price_try);
+CREATE TABLE IF NOT EXISTS offers (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    akakce_id     INTEGER NOT NULL REFERENCES handhelds(akakce_id),
+    seller        TEXT,
+    marketplace   TEXT,   -- NULL = the seller's own web shop
+    price_try     REAL,
+    listing_title TEXT,
+    shipping      TEXT,
+    stock         TEXT,
+    ship_time     TEXT,
+    seller_rating TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_offer_product ON offers(akakce_id);
+CREATE INDEX IF NOT EXISTS idx_offer_seller ON offers(seller);
+CREATE VIEW IF NOT EXISTS small_shop_offers AS
+    SELECT o.*, h.title FROM offers o JOIN handhelds h USING (akakce_id)
+    WHERE o.marketplace IS NULL;
 """
+OFFER_COLS = ["akakce_id", "seller", "marketplace", "price_try", "listing_title",
+              "shipping", "stock", "ship_time", "seller_rating"]
 
 
 def category(url):
@@ -40,10 +56,12 @@ def main():
         for line in open(path, encoding="utf-8"):
             r = json.loads(line)
             cat = category(r["url"])
-            if cat not in HANDHELD_CATEGORIES:
+            if cat == "playstation-aksesuarlari":
+                # PlayStation Portal sits among accessories; keep the device, not its cases/films
+                if not (re.search(r"portal", r["title"], re.I) and (r["min_price_try"] or 0) > 5000):
+                    continue
+            elif cat not in HANDHELD_CATEGORIES:
                 continue
-            if cat == "oyun-konsolu" and not HANDHELD_WORDS.search(r["title"]):
-                continue  # e.g. PS5 / Xbox home consoles from a search
             r["category"] = cat
             prev = rows.get(r["akakce_id"])
             if prev:
@@ -53,15 +71,24 @@ def main():
                 rows[r["akakce_id"]] = r
 
     db = sqlite3.connect("handhelds.db")
-    db.executescript("DROP TABLE IF EXISTS handhelds;" + SCHEMA)
+    db.executescript("DROP VIEW IF EXISTS small_shop_offers; DROP TABLE IF EXISTS offers;"
+                     "DROP TABLE IF EXISTS handhelds;" + SCHEMA)
     today = date.today().isoformat()
     db.executemany(
         "INSERT INTO handhelds VALUES (?,?,?,?,?,?,?,?,?,?)",
         [(r["akakce_id"], r["brand"], r["title"], r["category"], r["min_price_try"],
           r["extra_offers"] + 1, r["url"], r["image"], ",".join(sorted(r["sources"])), today)
          for r in rows.values()])
+    offers = []
+    for path in sorted(glob.glob("data/offers_*.jsonl")):
+        for line in open(path, encoding="utf-8"):
+            o = json.loads(line)
+            if o.get("seller") and o["akakce_id"] in rows:  # skip "no offers" marker rows
+                offers.append(tuple(o.get(c) for c in OFFER_COLS))
+    db.executemany(f"INSERT INTO offers ({','.join(OFFER_COLS)}) VALUES ({','.join('?' * len(OFFER_COLS))})",
+                   offers)
     db.commit()
-    print(f"{len(rows)} unique handhelds -> handhelds.db")
+    print(f"{len(rows)} unique handhelds, {len(offers)} offers -> handhelds.db")
 
 
 if __name__ == "__main__":
