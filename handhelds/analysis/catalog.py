@@ -46,7 +46,7 @@ CATALOG = [
     ("Anbernic RG557", "Anbernic", ANDROID, r"rg\s*-?\s*557", 5),
     ("Anbernic RG556", "Anbernic", ANDROID, r"rg\s*-?\s*556", 5),
     # --- known clone makers (before generic RG / PSP patterns pick them up) ---
-    ("Retro clone", "Generic", CLONE, r"qasul|nessiworld|\bsup\b.*oyun|mini\s*psp|^(?!.*\br3[56]).*\b\d{3,5}\s*oyunlu\b", None),
+    ("Retro clone", "Generic", CLONE, r"qasul|nessiworld|\bsup\b.*oyun|mini\s*psp|^(?!.*(\br3[56]|anbernic|\brg\s*-?\d|miyoo|powkiddy|trim\s*ui|retroid|\bayn\b)).*\b\d{3,5}\s*oyunlu\b", None),
     # --- phone controllers (before "switch" picks up "Switch uyumlu" etc.) ---
     ("Phone controller", "Various", PHONE,
      r"gamesir|telefon\s*(oyun|için)|backbone|kishi|\bx5s\b|teleskopik|joyistikli|mmctech\s*d\d", None),
