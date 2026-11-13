@@ -1,0 +1,123 @@
+[
+ {
+  "domain": "forum.donanimhaber.com",
+  "kind": "forum",
+  "reachable": true,
+  "robots_ok": true,
+  "robots_paths": "Allowed for *: /ikinci-el-konsollar-ve-aksesuarlari--f275 and thread pages. Disallowed: /search.asp, /api/, /yeni-ilan-*, /dukkan/, /login, /ikinci-el-sorunlu-alisverisler--f590, many ?query variants",
+  "listing_url_template": "https://forum.donanimhaber.com/ikinci-el-konsollar-ve-aksesuarlari--f275 (301 from /konsollar-ve-aksesuarlari--f275); thread: /<slug>--<id>",
+  "prices_in_html": true,
+  "personal_data_notes": "Seller usernames, avatars, possibly phone/city in post body; do not store",
+  "notes": "200, 64KB gzip (need --compressed). Section page had steam deck x8, rog ally x4, legion go x3, anbernic x2, switch x37 and TL prices (e.g. 11.900TL). Thread pages carry schema.org Product JSON-LD with price (TRY), title tagged [SATILIK]/[SATILDI] (sold status). Best candidate. Search.asp is disallowed so use section paging/sitemap only."
+ },
+ {
+  "domain": "konsolburada.com",
+  "kind": "classifieds",
+  "reachable": true,
+  "robots_ok": true,
+  "robots_paths": "Allow: /; Disallow admin, login, register, profile, listing_edit/create, messages. /pages/listing_detail.aspx allowed; sitemap.xml lists 134 listing_detail URLs",
+  "listing_url_template": "https://konsolburada.com/pages/listing_detail.aspx?ref=<guid> (enumerate via /sitemap.xml)",
+  "prices_in_html": false,
+  "personal_data_notes": "Seller contact behind login ('question-login'); no personal data seen in public HTML",
+  "notes": "Homepage 200 (non-www host has bad TLS cert). Small console classifieds site (mostly PlayStation/Xbox/Nintendo). Homepage: 1 'switch' mention, no TL prices; listing detail page 200 with no TL/price text in server HTML (likely JS/login-gated). Low handheld volume."
+ },
+ {
+  "domain": "technopat.net",
+  "kind": "forum",
+  "reachable": false,
+  "robots_ok": null,
+  "robots_paths": null,
+  "listing_url_template": "https://www.technopat.net/sosyal/ (search hits exist for steam-deck tags)",
+  "prices_in_html": false,
+  "personal_data_notes": "n/a",
+  "notes": "403 Cloudflare 'Attention Required'. BLOCKED, not pursued."
+ },
+ {
+  "domain": "dolap.com",
+  "kind": "marketplace",
+  "reachable": false,
+  "robots_ok": null,
+  "robots_paths": null,
+  "listing_url_template": null,
+  "prices_in_html": false,
+  "personal_data_notes": "n/a",
+  "notes": "403 Cloudflare. BLOCKED."
+ },
+ {
+  "domain": "gardrops.com",
+  "kind": "marketplace",
+  "reachable": false,
+  "robots_ok": null,
+  "robots_paths": null,
+  "listing_url_template": null,
+  "prices_in_html": false,
+  "personal_data_notes": "n/a",
+  "notes": "403 Cloudflare 'Just a moment'. BLOCKED."
+ },
+ {
+  "domain": "letgo.com",
+  "kind": "classifieds",
+  "reachable": false,
+  "robots_ok": null,
+  "robots_paths": null,
+  "listing_url_template": null,
+  "prices_in_html": false,
+  "personal_data_notes": "n/a",
+  "notes": "200 but 'Challenge Validation' bot challenge page. BLOCKED (also letgo TR largely defunct)."
+ },
+ {
+  "domain": "ciceksepeti.com",
+  "kind": "marketplace",
+  "reachable": false,
+  "robots_ok": null,
+  "robots_paths": null,
+  "listing_url_template": null,
+  "prices_in_html": false,
+  "personal_data_notes": "n/a",
+  "notes": "403 Cloudflare challenge. BLOCKED; not a second-hand venue anyway."
+ },
+ {
+  "domain": "pttavm.com / epttavm.com",
+  "kind": "marketplace",
+  "reachable": false,
+  "robots_ok": null,
+  "robots_paths": null,
+  "listing_url_template": null,
+  "prices_in_html": false,
+  "personal_data_notes": "n/a",
+  "notes": "epttavm.com redirects to pttavm.com; 403 Cloudflare. BLOCKED."
+ },
+ {
+  "domain": "eksisozluk.com",
+  "kind": "forum",
+  "reachable": false,
+  "robots_ok": null,
+  "robots_paths": null,
+  "listing_url_template": null,
+  "prices_in_html": false,
+  "personal_data_notes": "n/a",
+  "notes": "403 Cloudflare challenge. BLOCKED."
+ },
+ {
+  "domain": "old.reddit.com",
+  "kind": "forum",
+  "reachable": false,
+  "robots_ok": false,
+  "robots_paths": "robots.txt: User-agent * Disallow: /",
+  "listing_url_template": "https://old.reddit.com/r/<sub>/search.json",
+  "prices_in_html": false,
+  "personal_data_notes": "n/a",
+  "notes": "403 'Blocked' on .json, and robots disallows all. Do not use."
+ },
+ {
+  "domain": "pasaj.turkcell.com.tr",
+  "kind": "marketplace",
+  "reachable": false,
+  "robots_ok": null,
+  "robots_paths": null,
+  "listing_url_template": null,
+  "prices_in_html": false,
+  "personal_data_notes": "n/a",
+  "notes": "Meta-refresh to turkcell.com.tr/pasaj; not tested further (new-device/refurb retail, no handheld sale posts expected)."
+ }
+]

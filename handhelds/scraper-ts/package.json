@@ -1,0 +1,21 @@
+{
+  "name": "handheld-scraper",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Polite TypeScript port of ProductScrape for Turkish handheld console prices (personal use)",
+  "type": "module",
+  "scripts": {
+    "scrape": "tsx src/cli.ts",
+    "test": "tsx --test test/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "cheerio": "1.0.0",
+    "undici": "6.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.2",
+    "tsx": "4.19.2",
+    "typescript": "5.7.2"
+  }
+}
