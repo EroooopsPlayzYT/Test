@@ -1,6 +1,6 @@
 // Akakce: search results -> product pages -> one Product per seller offer (all shops, big and small).
 import * as cheerio from "cheerio";
-import { fetchText, pool } from "../http.js";
+import { BlockedError, fetchText, pool } from "../http.js";
 import { productsFromJsonLd } from "../jsonld.js";
 import { Adapter, Product, parsePrice } from "../types.js";
 
@@ -9,6 +9,7 @@ const BASE = "https://www.akakce.com";
 export const akakce: Adapter = {
   name: "akakce",
   async search(query, limit) {
+    const words = query.toLowerCase().split(/\s+/).filter((w) => w && w !== "*");
     const cards: { id: string; title: string; url: string; price: number | null }[] = [];
     for (let page = 1; cards.length < limit && page <= 20; page++) {
       const url = `${BASE}/arama/?q=${encodeURIComponent(query)}${page > 1 ? `&p=${page}` : ""}`;
@@ -18,6 +19,9 @@ export const akakce: Adapter = {
         const a = $(li).find("a[href]").first();
         const href = a.attr("href");
         if (!href || cards.some((c) => c.id === $(li).attr("data-pr"))) return;
+        const title = ($(li).find("h3").text() || a.attr("title") || "").trim();
+        // Only open product pages that match every query word (no "pocket" mattresses).
+        if (words.length && !words.every((w) => title.toLowerCase().includes(w))) return;
         cards.push({
           id: $(li).attr("data-pr")!,
           title: ($(li).find("h3").text() || a.attr("title") || "").trim(),
@@ -25,7 +29,7 @@ export const akakce: Adapter = {
           price: parsePrice($(li).find(".pt_v9").first().text()),
         });
       });
-      if (cards.length === before) break; // no new results: last page
+      if ($("li[data-pr]").length === 0 || cards.length === before && page > 2) break; // end of results
     }
     const now = new Date().toISOString();
     const perProduct = await pool(cards.slice(0, limit), 1, async (c) => {
@@ -38,6 +42,7 @@ export const akakce: Adapter = {
           }));
         }
       } catch (e) {
+        if (e instanceof BlockedError) throw e;   // stop the source instead of hammering on
         console.warn(`  akakce ${c.id}: ${(e as Error).message}`);
       }
       return [{ source: "akakce", id: c.id, title: c.title, priceTry: c.price, inStock: null,

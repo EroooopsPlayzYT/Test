@@ -137,6 +137,9 @@ def category(url):
 PRIORITY = [  # (model label, regex on lowercased title); first match wins, most specific first
     # --- top: Retroid Pocket 6 (8GB / 12GB) ---
     ("Retroid Pocket 6", r"retroid\s*pocket\s*6|\brp\s*6\b"),
+    # --- Anbernic RG556 / RG557 ---
+    ("Anbernic RG557", r"rg\s*-?\s*557"),
+    ("Anbernic RG556", r"rg\s*-?\s*556"),
     # --- AYN ---
     ("AYN Odin 3", r"odin\s*3"),
     ("AYN Odin 2 Portal", r"odin\s*2\s*portal"),

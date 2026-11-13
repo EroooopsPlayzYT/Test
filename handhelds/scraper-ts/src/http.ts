@@ -43,6 +43,8 @@ export class RobotsDisallowedError extends Error {
 type Rule = { allow: boolean; path: string };
 const robotsCache = new Map<string, Promise<Rule[]>>();
 const lastHit = new Map<string, number>();
+/** Circuit breaker: once a host blocks us, skip it for the rest of the run. */
+const blockedHosts = new Map<string, BlockedError>();
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export interface FetchOptions {
@@ -121,6 +123,8 @@ export function isAllowed(rules: Rule[], pathAndQuery: string): boolean {
 export async function fetchText(url: string, opts: FetchOptions = {}): Promise<string> {
   const { delayMs = 1500, retries = 2, timeoutMs = 30000, skipRobots = false } = opts;
   const u = new URL(url);
+  const tripped = blockedHosts.get(u.host);
+  if (tripped) throw new BlockedError(url, tripped.status, `host already blocked this run (${tripped.reason})`);
   if (!skipRobots && !isAllowed(await robotsRules(u.origin), u.pathname + u.search)) {
     throw new RobotsDisallowedError(url);
   }
@@ -136,7 +140,11 @@ export async function fetchText(url: string, opts: FetchOptions = {}): Promise<s
       });
       const body = await res.text();
       const reason = blockReason(res.status, res.headers, body);
-      if (reason) throw new BlockedError(url, res.status, reason);
+      if (reason) {
+        const err = new BlockedError(url, res.status, reason);
+        blockedHosts.set(u.host, err);
+        throw err;
+      }
       if (res.status >= 500 && attempt < retries) { await sleep(5000 * (attempt + 1)); continue; }
       if (!res.ok) throw new Error(`HTTP ${res.status} at ${url}`);
       return body;

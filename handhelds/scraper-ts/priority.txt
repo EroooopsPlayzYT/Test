@@ -6,3 +6,7 @@ odin 2
 odin 3
 ayn thor
 ayn
+anbernic rg557
+anbernic rg556
+rg557
+rg556

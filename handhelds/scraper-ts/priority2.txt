@@ -5,3 +5,5 @@ retroid pocket flip
 retroid pocket classic
 ayn loki
 odin lite
+rg557
+rg556
