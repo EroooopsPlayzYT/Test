@@ -70,12 +70,16 @@ CREATE TABLE IF NOT EXISTS reviews (
 CREATE INDEX IF NOT EXISTS idx_review_product ON reviews(akakce_id);
 CREATE TABLE IF NOT EXISTS sahibinden_listings (
     id        INTEGER PRIMARY KEY AUTOINCREMENT,
-    model     TEXT,
-    kind      TEXT,            -- ad | store | category
-    title     TEXT NOT NULL,   -- ad title as shown in web search results
-    price_try REAL,
-    location  TEXT,
-    url       TEXT UNIQUE      -- open manually; no seller info stored
+    model       TEXT,
+    kind        TEXT,            -- ad | store | category | mod-service
+    source      TEXT,            -- web-search | screenshot (sent by the user)
+    ilan_no     TEXT UNIQUE,     -- search this number on sahibinden to open the ad
+    title       TEXT NOT NULL,
+    price_try   REAL,
+    location    TEXT,            -- city / district only
+    listed_date TEXT,
+    condition   TEXT,
+    url         TEXT UNIQUE      -- no seller info stored
 );
 CREATE TABLE IF NOT EXISTS sahibinden_searches (
     model        TEXT PRIMARY KEY,
@@ -181,11 +185,20 @@ def main():
     for path in sorted(glob.glob("data/sahibinden_*.jsonl")):
         for line in open(path, encoding="utf-8"):
             s = json.loads(line)
-            if "sahibinden.com" not in (s.get("url") or ""):
+            url = s.get("url")
+            if url and "sahibinden.com" not in url:
                 continue
-            db.execute("INSERT OR IGNORE INTO sahibinden_listings (model, kind, title, price_try, location, url)"
-                       " VALUES (?,?,?,?,?,?)", (s.get("model"), s.get("kind", "ad"), s["title"],
-                                                 s.get("price_try"), s.get("snippet_location"), s["url"]))
+            ilan = s.get("ilan_no")
+            if not ilan and url:
+                m = re.search(r"-(\d{8,})/(?:detay|detail)", url)
+                ilan = m.group(1) if m else None
+            if not url and not ilan:
+                continue
+            db.execute("INSERT OR IGNORE INTO sahibinden_listings (model, kind, source, ilan_no, title, price_try,"
+                       " location, listed_date, condition, url) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                       (s.get("model"), s.get("kind", "ad"), s.get("source", "web-search"), ilan, s["title"],
+                        s.get("price_try"), s.get("snippet_location"), s.get("listed_date"),
+                        s.get("condition"), url))
     for path in sorted(glob.glob("data/search_*.jsonl")):
         for line in open(path, encoding="utf-8"):
             if not line.strip():
