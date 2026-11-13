@@ -20,12 +20,12 @@ CATALOG = [
     # --- priority: Retroid Pocket 6 ---
     ("Retroid Pocket 6", "Retroid", ANDROID, r"retroid\s*pocket\s*6|\brp\s*6\b", 2),
     # --- AYN ---
-    ("AYN Odin 3", "AYN", ANDROID, r"odin\s*3", 3),
-    ("AYN Odin 2 Portal", "AYN", ANDROID, r"odin\s*2\s*portal", 3),
-    ("AYN Odin 2 Mini", "AYN", ANDROID, r"odin\s*2\s*mini", 3),
-    ("AYN Odin 2 Max", "AYN", ANDROID, r"odin\s*2\s*max", 3),
-    ("AYN Odin 2", "AYN", ANDROID, r"odin\s*2", 3),
-    ("AYN Odin Lite", "AYN", ANDROID, r"odin\s*lite", 3),
+    ("AYN Odin 3", "AYN", ANDROID, r"^(?=.*(\bayn\b|ayntec|konsol|handheld|android|retro|emulat|snapdragon|\d+\s*gb)).*(odin\s*3)", 3),
+    ("AYN Odin 2 Portal", "AYN", ANDROID, r"^(?=.*(\bayn\b|ayntec|konsol|handheld|android|retro|emulat|snapdragon|\d+\s*gb)).*(odin\s*2\s*portal)", 3),
+    ("AYN Odin 2 Mini", "AYN", ANDROID, r"^(?=.*(\bayn\b|ayntec|konsol|handheld|android|retro|emulat|snapdragon|\d+\s*gb)).*(odin\s*2\s*mini)", 3),
+    ("AYN Odin 2 Max", "AYN", ANDROID, r"^(?=.*(\bayn\b|ayntec|konsol|handheld|android|retro|emulat|snapdragon|\d+\s*gb)).*(odin\s*2\s*max)", 3),
+    ("AYN Odin 2", "AYN", ANDROID, r"^(?=.*(\bayn\b|ayntec|konsol|handheld|android|retro|emulat|snapdragon|\d+\s*gb)).*(odin\s*2)", 3),
+    ("AYN Odin Lite", "AYN", ANDROID, r"^(?=.*(\bayn\b|ayntec|konsol|handheld|android|retro|emulat|snapdragon|\d+\s*gb)).*(odin\s*lite)", 3),
     ("AYN Thor", "AYN", ANDROID, r"\bayn\b.*\bthor\b|\bthor\b.*\bayn\b", 3),
     ("AYN Loki", "AYN", PC, r"\bloki\b", 3),
     ("AYN Odin", "AYN", ANDROID, r"\bayn\b.*\bodin\b|\bodin\b.*\b(konsol|handheld|android|retro|oyun)", 3),
