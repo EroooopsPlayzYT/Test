@@ -9,11 +9,11 @@ const BASE = "https://www.idefix.com";
 export const IDEFIX_BRANDS: Record<string, string> = {
   valve: "valve-20047255", steam: "steam-20038434", nintendo: "nintendo-1001386",
   anbernic: "anbernic-20081785", ayaneo: "ayaneo-20083672", ayn: "ayn-20004603",
-  playstation: "playstation-20122520", sony: "sony-1001804", gpd: "gpd-20018863",
+  playstation: "playstation-20122520", sony: "sony-1001804",
   "data-frog": "data-frog-20070228", asus: "asus-1000150", lenovo: "lenovo-1001108", msi: "msi-1001318",
 };
 // Brand pages for big brands are mostly laptops/TVs: keep only links that look like handhelds.
-const HANDHELD_SLUG = /deck|ally|legion-go|claw|ayaneo|odin|thor|retroid|anbernic|rg-?\d|miyoo|powkiddy|switch|portal|psp|vita|gpd|win-?\d|el-konsol|oyun-konsol|retro/;
+const HANDHELD_SLUG = /deck|ally|legion-go|claw|ayaneo|odin|thor|retroid|anbernic|rg-?\d|miyoo|powkiddy|switch|portal|psp|vita|el-konsol|oyun-konsol|retro/;
 
 export const idefix: Adapter = {
   name: "idefix",
