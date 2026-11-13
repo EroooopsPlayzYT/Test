@@ -14,6 +14,7 @@ Writes to handhelds.db:
 """
 import argparse
 import json
+import re
 import sqlite3
 import urllib.request
 import warnings
@@ -24,7 +25,7 @@ from statistics import median
 
 from . import algorithms as alg
 from .catalog import CLONE, classify, tier
-from .ml import classify_titles, predict_fair, train_price_model, train_title_classifier
+from .ml import classify_titles, out_of_fold, predict_fair, train_price_model, train_title_classifier
 from .parse import parse_title
 
 FX_CACHE = Path("data/fx_usd_try.json")
@@ -35,27 +36,29 @@ SHIPPING = {"goretroid.com": 0, "ayntec.com": None}
 USED_SITES = ("donanimhaber", "technopat", "letgo", "sahibinden", "dolap", "gardrops")
 
 SOURCES = [  # (source_table, source_kind, SQL -> title, price_try, price_usd, condition_hint, source, url, seen)
-    ("handhelds", "aggregator",
-     "SELECT title, min_price_try, NULL, 'new', 'akakce', url, scraped_on FROM handhelds"),
+    # order = dedupe priority: direct listings first, scraper copies next, aggregates and snippets last
+    ("used_listings", "classified",
+     "SELECT title, price_try, NULL, 'used' || CASE WHEN sold THEN ' sold' ELSE '' END, source, url, scraped_at "
+     "FROM used_listings"),
+    ("sahibinden_listings", "classified",
+     "SELECT title, price_try, NULL, COALESCE(condition, 'used'), 'sahibinden', "
+     "COALESCE(url, 'https://www.sahibinden.com/ilan/' || ilan_no), listed_date FROM sahibinden_listings WHERE kind = 'ad'"),
     ("offers", "shop",
      "SELECT h.title, o.price_try, NULL, 'new', COALESCE(o.marketplace || '/', '') || o.seller, h.url, h.scraped_on "
      "FROM offers o JOIN handhelds h USING (akakce_id)"),
     ("shop_products", "shop",
      "SELECT title, price_try, NULL, 'new', shop, url, NULL FROM shop_products"),
-    ("search_index_listings", "search_snippet",
-     "SELECT title, price_try, price_usd, NULL, source, url, seen_date FROM search_index_listings"),
-    ("used_listings", "classified",
-     "SELECT title, price_try, NULL, 'used' || CASE WHEN sold THEN ' sold' ELSE '' END, source, url, scraped_at "
-     "FROM used_listings"),
+    ("manual_listings", "user_report",
+     "SELECT title, price_try, price_usd, condition, source, url, seen FROM manual_listings"),
     ("scraper_observations", "scraper",
      "SELECT title, price_try, NULL, COALESCE(condition, '') || CASE WHEN in_stock = 0 THEN ' sold' ELSE '' END, "
      "source || COALESCE('/' || seller, ''), url, scraped_at FROM scraper_observations "
      "WHERE source NOT IN ('donanimhaber')"),   # forum rows already come via used_listings
-    ("sahibinden_listings", "classified",
-     "SELECT title, price_try, NULL, COALESCE(condition, 'used'), 'sahibinden', COALESCE(url, 'ilan ' || ilan_no), "
-     "listed_date FROM sahibinden_listings WHERE kind = 'ad'"),
-    ("manual_listings", "user_report",
-     "SELECT title, price_try, price_usd, condition, source, url, seen FROM manual_listings"),
+    ("handhelds", "aggregator",                   # Akakce cheapest price: only for products without offer rows
+     "SELECT title, min_price_try, NULL, 'new', 'akakce', url, scraped_on FROM handhelds "
+     "WHERE akakce_id NOT IN (SELECT DISTINCT akakce_id FROM offers)"),
+    ("search_index_listings", "search_snippet",
+     "SELECT title, price_try, price_usd, NULL, source, url, seen_date FROM search_index_listings"),
 ]
 
 SCHEMA = """
@@ -113,6 +116,34 @@ def usd_try(override=None):
         return None, "unavailable"
 
 
+SOURCE_ALIASES = {"forum.donanimhaber.com": "donanimhaber", "donanimhaber.com": "donanimhaber",
+                  "amazon.com.tr": "Amazon Türkiye", "amazontr": "Amazon Türkiye",
+                  "idefix.com": "idefix", "trendyol.com": "Trendyol", "hepsiburada.com": "Hepsiburada",
+                  "n11.com": "n11", "pazarama.com": "Pazarama", "teknosa.com": "Teknosa",
+                  "mediamarkt.com.tr": "MediaMarkt", "vatanbilgisayar.com": "Vatan", "akakce.com": "akakce",
+                  "woocommerce:www.gaming.gen.tr": "gaming.gen.tr", "www.gaming.gen.tr": "gaming.gen.tr"}
+
+
+def canonical_source(source):
+    """'akakce/Hepsiburada/Mini More' -> 'Hepsiburada/Mini More'; 'forum.donanimhaber.com' -> 'donanimhaber'."""
+    parts = [p for p in (source or "").split("/") if p]
+    if len(parts) > 1 and parts[0].lower() == "akakce":
+        parts = parts[1:]                       # scraper copy of an Akakce offer
+    if parts:
+        head = parts[0].lower().removeprefix("www.")
+        parts[0] = SOURCE_ALIASES.get(head, SOURCE_ALIASES.get(parts[0], parts[0]))
+    return "/".join(parts) or None
+
+
+def canonical_url(url):
+    """Scheme/www/query-free URL, so the same ad found via two routes compares equal."""
+    if not url:
+        return None
+    u = re.sub(r"^https?://(www\.)?", "", url.strip().lower()).split("?")[0].split("#")[0].rstrip("/")
+    m = re.search(r"sahibinden\.com/.*?(\d{9,})", u)
+    return f"sahibinden:{m.group(1)}" if m else u
+
+
 def priority_of(model, catalog_prio, ram_gb):
     if model == "Retroid Pocket 6" and ram_gb in (8, 12):
         return 1
@@ -136,18 +167,31 @@ def load_rows(db, fx, import_tax):
             price = price if (price or 0) >= 100 else None
             domain = (source or "").split("/")[0]
             landed = round(usd * fx * (1 + import_tax), 2) if usd and fx else None
+            # TL listings are domestic (1); USD-only stores from the SHIPPING table; unknown stays NULL
+            ships = SHIPPING.get(domain) if usd and not price else (1 if price else None)
+            source = canonical_source(source)
             rows.append({**p, "title": title, "price_try": price, "price_usd": usd,
-                         "ships_to_tr": SHIPPING.get(domain) if usd else None, "landed_cost_try": landed,
+                         "ships_to_tr": ships, "landed_cost_try": landed,
                          "effective_price_try": price or landed,
                          "model": model, "brand": brand, "category": cat,
                          "category_source": "catalog" if cat else None, "catalog_priority": cprio,
                          "source_table": table, "source_kind": kind, "source": source, "url": url, "seen": seen})
-    seen_keys, out = set(), []
-    for r in rows:  # algorithm: dedupe identical observations
-        k = alg.dedupe_key(r) + (r["url"],)
-        if k not in seen_keys:
-            seen_keys.add(k)
-            out.append(r)
+    # algorithm: dedupe. Same ad = same canonical URL (+ price), or same seller + model + variant + price.
+    seen_urls, seen_keys, out = set(), {}, []
+    for r in rows:  # rows are in source-priority order, so the most direct copy wins
+        cu = canonical_url(r["url"])
+        url_key = (cu, round(r["effective_price_try"] or 0)) if cu else None
+        if url_key and url_key in seen_urls:
+            continue
+        k = alg.dedupe_key(r)
+        # content match only counts as a duplicate when it comes from ANOTHER source table
+        # (two different forum ads can share model + price; the same offer copied by a scraper can't)
+        if r["effective_price_try"] and k in seen_keys and seen_keys[k] != r["source_table"]:
+            continue
+        if url_key:
+            seen_urls.add(url_key)
+        seen_keys.setdefault(k, r["source_table"])
+        out.append(r)
     return out
 
 
@@ -206,19 +250,26 @@ def main():
     metrics.update(m)
     err = min(m["cv_median_abs_pct_error"].values())
     ml_fair = predict_fair(model, rows)
+    # out-of-fold for rows the model trained on, so a listing is never priced by a model that saw it
+    train_ids = {id(r): i for i, r in enumerate(train)}
+    oof = out_of_fold(m["chosen"], train)
+    ml_fair = [oof[train_ids[id(r)]] if id(r) in train_ids else f for r, f in zip(rows, ml_fair)]
 
-    # calibrate the ML price to each model's own observed level (empirical-Bayes shrinkage, k=3):
-    # keeps the ML variant ordering (8GB < 12GB) but stops rare models collapsing onto one shared value
+    # calibrate to each model's observed level (empirical Bayes, k=3), leave-one-out so a row's own
+    # price never pulls its own fair price; keeps ML variant ordering (8GB < 12GB)
     ratios = defaultdict(list)
     for r, f in zip(rows, ml_fair):
         if usable(r) and not r["outlier"] and not r["is_clone"]:
-            ratios[(r["model"], r["condition"])].append(r["price_try"] / f)
+            ratios[(r["model"], r["condition"])].append((id(r), r["price_try"] / f))
+    has_try_data = {m_ for (m_, _c) in ratios}
     k = 3
     for r, f in zip(rows, ml_fair):
         if r["is_clone"]:
             r["fair_price"] = r["group_median"]   # clones: plain median of comparable clones
+        elif r["model"] not in has_try_data or (r["model"], r["condition"]) not in ratios and r["condition"] == "new":
+            r["fair_price"] = None                # no TL prices for this model (or for it new): don't guess
         else:
-            rs = ratios.get((r["model"], r["condition"]), [])
+            rs = [x for i, x in ratios.get((r["model"], r["condition"]), []) if i != id(r)]
             factor = (len(rs) * median(rs) + k) / (len(rs) + k) if rs else 1.0
             r["fair_price"] = f * factor
         p = r["effective_price_try"]
@@ -226,9 +277,8 @@ def main():
         d = r["deal_pct"]
         r["deal_signal"] = (None if d is None else "good deal" if d >= err
                             else "overpriced" if d <= -err else "fair (within model error)")
-        if d is not None and not r["is_clone"] and not ratios.get((r["model"], r["condition"])) \
-                and not any(key[0] == r["model"] for key in ratios):
-            r["deal_signal"] = "no TR price data for this model (estimate only)"
+        if r["fair_price"] is None and not r["is_clone"]:
+            r["deal_signal"] = "no TR price data for this model"
         if r["ships_to_tr"] == 0:
             r["deal_signal"] = "does not ship to TR"
 

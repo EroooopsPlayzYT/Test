@@ -18,7 +18,8 @@ NOT_HANDHELD = re.compile(r"lavabo|banyo|dolab[ıi]|mobilya|yatak|koltuk|masa\b|
                           r"elbise|tişört|parfüm|mutfak|tencere", re.I)
 WANTED = re.compile(r"al[ıi]n[ıi]k|al[ıi]n[ıi]r\b|ar[ıi]yorum|aran[ıi]yor|\bwtb\b|almak\s*istiyorum", re.I)
 NEW_STRONG = re.compile(r"\bs[ıi]f[ıi]r\b(?!\s*(ayar|gibi))|kapal[ıi]\s*kutu|ac[ıi]lmam[ıi]ş|\bmühürlü\b|\bbrand\s*new\b", re.I)
-SOLD = re.compile(r"\bsatıldı\b|\bsatildi\b|\bsold\b", re.I)
+# SATILDI = sold, ALINDI = bought/closed (not "ALINIK" = wanted), KAPANDI = closed
+SOLD = re.compile(r"\bsat[ıi]ld[ıi]\b|\bal[ıi]nd[ıi]\b|\bkapand[ıi]\b|\bsold\b|sold\s*out|\bt[üu]kendi\b", re.I)
 BUNDLE = re.compile(r"\+\s*\w*\s*oyun|bundle|\bset\b|hediye|\+\s*(sd|kart|çanta|kılıf)|full\s*set", re.I)
 
 
@@ -72,7 +73,7 @@ def condition(title, hint=None):
     if USED.search(title or ""):
         return "used"
     if hint:
-        h = hint.lower()
+        h = hint.translate(str.maketrans("İIıŞşÇçĞğÖöÜü", "iiissccggoouu")).lower()   # "İkinci El" -> "ikinci el"
         if "used" in h or "ikinci" in h:
             return "used"
         if "new" in h or "sıfır" in h:

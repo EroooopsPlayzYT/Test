@@ -67,20 +67,32 @@ def _cv_mape(make, rows, y, folds=5):
     return float(np.median(errs))
 
 
+CANDIDATES = {
+    "ridge_onehot": lambda: _Stack(Ridge(alpha=1.0)),
+    # small leaves so rare models (RP3+, RP4 Pro, RP5…) get their own price instead of one shared value
+    "gradient_boosting": lambda: _Stack(HistGradientBoostingRegressor(max_iter=400, learning_rate=0.06,
+                                                                      min_samples_leaf=3, l2_regularization=0.5,
+                                                                      random_state=7)),
+}
+
+
 def train_price_model(rows):
     """rows: dicts with CAT_FEATURES + NUM_FEATURES + price_try. Returns (model, metrics)."""
     y = np.log(np.array([r["price_try"] for r in rows], dtype=float))
-    candidates = {
-        "ridge_onehot": lambda: _Stack(Ridge(alpha=1.0)),
-        # small leaves so rare models (RP3+, RP4 Pro, RP5…) get their own price instead of one shared value
-        "gradient_boosting": lambda: _Stack(HistGradientBoostingRegressor(max_iter=400, learning_rate=0.06,
-                                                                          min_samples_leaf=3, l2_regularization=0.5,
-                                                                          random_state=7)),
-    }
-    scores = {name: _cv_mape(make, rows, y) for name, make in candidates.items()}
+    scores = {name: _cv_mape(make, rows, y) for name, make in CANDIDATES.items()}
     best = min(scores, key=scores.get)
-    model = candidates[best]().fit(rows, y)
+    model = CANDIDATES[best]().fit(rows, y)
     return model, {"chosen": best, "cv_median_abs_pct_error": scores, "n_train": len(rows)}
+
+
+def out_of_fold(name, rows, folds=5):
+    """Prediction for every training row from a model that never saw that row (no in-sample leakage)."""
+    y = np.log(np.array([r["price_try"] for r in rows], dtype=float))
+    pred = np.zeros(len(rows))
+    for tr, te in KFold(n_splits=min(folds, len(rows)), shuffle=True, random_state=11).split(rows):
+        m = CANDIDATES[name]().fit([rows[i] for i in tr], y[tr])
+        pred[te] = m.predict([rows[i] for i in te])
+    return [float(math.exp(p)) for p in pred]
 
 
 def predict_fair(model, rows):

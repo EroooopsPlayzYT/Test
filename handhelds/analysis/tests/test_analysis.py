@@ -98,3 +98,21 @@ class JunkFilters(unittest.TestCase):
         for t, m in cases.items():
             self.assertEqual(classify(t)[0], m, t)
             self.assertFalse(parse_title(t)["is_accessory"], t)
+
+
+class ReviewRound2(unittest.TestCase):
+    def test_sold_markers(self):
+        for t in ["STEAM DECK OLED [ALINDI]", "[SATILDI] RG556", "Switch Lite - KAPANDI"]:
+            self.assertTrue(parse_title(t)["sold"], t)
+        self.assertFalse(parse_title("ALINIK GBA SP")["sold"])   # wanted, not sold
+
+    def test_turkish_hint(self):
+        self.assertEqual(parse_title("Retroid Pocket 4 pro", "İkinci El")["condition"], "used")
+
+    def test_canonical_source_and_url(self):
+        from analysis.run import canonical_source, canonical_url
+        self.assertEqual(canonical_source("forum.donanimhaber.com"), "donanimhaber")
+        self.assertEqual(canonical_source("akakce/Hepsiburada/Mini More"), "Hepsiburada/Mini More")
+        self.assertEqual(canonical_source("idefix.com"), canonical_source("idefix"))
+        self.assertEqual(canonical_url("https://forum.donanimhaber.com/x--1?a=1"),
+                         canonical_url("http://www.forum.donanimhaber.com/x--1"))
