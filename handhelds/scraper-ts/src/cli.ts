@@ -38,7 +38,7 @@ const ADAPTERS: Record<string, Adapter> = {
     },
   },
   "gaming.gen.tr": woocommerce("www.gaming.gen.tr"),
-  donanimhaber: donanimhaber(Number(process.env.DH_PAGES ?? 10)),
+  donanimhaber: donanimhaber(Number(process.env.DH_PAGES ?? 10), Number(process.env.DH_START ?? 1)),
 };
 
 function resolve(name: string): Adapter {

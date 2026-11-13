@@ -16,13 +16,13 @@ export function threadLinks(html: string): string[] {
   return [...out];
 }
 
-export function donanimhaber(maxPages = 10): Adapter {
+export function donanimhaber(maxPages = 10, startPage = 1): Adapter {
   return {
     name: "donanimhaber",
     async search(query, limit) {
       const words = query.toLowerCase().split(/\s+/).filter((w) => w && w !== "*").map((w) => w.replace(/\s/g, "-"));
       const links: string[] = [];
-      for (let page = 1; page <= maxPages && links.length < limit; page++) {
+      for (let page = startPage; page <= maxPages && links.length < limit; page++) {
         const html = await fetchText(`${BASE}${SECTION}${page > 1 ? `?sayfa=${page}` : ""}`, { delayMs: 2500 });
         for (const l of threadLinks(html)) {
           if (links.includes(l) || !HANDHELD.test(l)) continue;
