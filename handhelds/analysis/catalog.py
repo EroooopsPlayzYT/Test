@@ -45,6 +45,11 @@ CATALOG = [
     # --- Anbernic priority ---
     ("Anbernic RG557", "Anbernic", ANDROID, r"rg\s*-?\s*557", 5),
     ("Anbernic RG556", "Anbernic", ANDROID, r"rg\s*-?\s*556", 5),
+    # --- known clone makers (before generic RG / PSP patterns pick them up) ---
+    ("Retro clone", "Generic", CLONE, r"qasul|nessiworld|\bsup\b.*oyun|mini\s*psp|^(?!.*\br3[56]).*\b\d{3,5}\s*oyunlu\b", None),
+    # --- phone controllers (before "switch" picks up "Switch uyumlu" etc.) ---
+    ("Phone controller", "Various", PHONE,
+     r"gamesir|telefon\s*(oyun|için)|backbone|kishi|\bx5s\b|teleskopik|joyistikli|mmctech\s*d\d", None),
     # --- other Anbernic ---
     ("Anbernic RG477M", "Anbernic", ANDROID, r"rg\s*-?\s*477", None),
     ("Anbernic RG476H", "Anbernic", ANDROID, r"rg\s*-?\s*476", None),
@@ -84,13 +89,12 @@ CATALOG = [
     ("Nintendo 3DS/2DS", "Nintendo", NINTENDO, r"\b[23]\s*ds\b|new\s*[23]ds", None),
     ("PlayStation Portal", "Sony", STREAM, r"playstation\s*portal|ps\s*portal|portal\s*remote", None),
     ("PS Vita", "Sony", SONY, r"\bvita\b", None),
-    ("PSP", "Sony", SONY, r"\bpsp\b", None),
+    ("PSP", "Sony", SONY, r"^(?!.*(\bsup\b|oyunlu|qasul|\bg\d\b|\bx\d{1,2}\b)).*\bpsp\b", None),
     # --- Linux / clones ---
     ("Miyoo", "Miyoo", LINUX, r"miyoo", None),
     ("Powkiddy", "Powkiddy", LINUX, r"powkiddy", None),
     ("TrimUI", "TrimUI", LINUX, r"trim\s*ui", None),
     ("R36S", "Generic", LINUX, r"\br3[56]\s*(s|max|h)\b|\br36s\b", None),
-    ("Phone controller", "Various", PHONE, r"gamesir|telefon\s*oyun|backbone|kishi|\bx5s\b", None),
     ("Retro clone", "Generic", CLONE,
      r"el\s*atari|retro|game\s*box|\bsup\b|oyunlu|nostalji|mini\s*oyun|gameboy|game\s*boy|atari|ateri|"
      r"gamepad|el\s*tipi|tasinabilir.*(konsol|oyun)|oyun\s*konsolu|game\s*console|klasik\s*oyun|\bs10\b|\bg5\b|"

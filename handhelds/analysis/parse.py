@@ -4,14 +4,17 @@ import re
 ACCESSORY = re.compile(
     r"kılıf|kilif|çanta|canta|koruyucu|temperli|\bcam\b|\bgrip\b|stand|şarj|sarj|kablo|adaptör|adaptor|"
     r"thumb|analog\s*(başlık|koruyucu)|sticker|kaplama|\bcase\b|\bskin\b|film|\bdock\b|silikon|joy-?con|"
-    r"kontrolc|oyun\s*kolu|amiibo|hediye\s*kart|yedek\s*parça|batarya\b|tuş\s*takımı|sadece\s*kılıf", re.I)
-GAME = re.compile(r"\boyunu\b|\bswitch\s*oyun\b|\bps5\b.*oyun|edition\b(?!.*konsol)", re.I)
+    r"kontrolc|oyun\s*kolu|\bpro\s*kol\b|\bkol\b(?!.*konsol)|pro\s*controller|amiibo|hediye\s*kart|yedek\s*parça|batarya\b|tuş\s*takımı|sadece\s*kılıf", re.I)
+GAME = re.compile(r"\boyunu\b|\bswitch\s*oyun\b|\bps5\b.*oyun|edition\b(?!.*konsol)|"
+                  r"^(?!.*(konsol|console|bundle|\+|\bset\b|paket)).*\b(mario\s*kart|mariokart|zelda|pokemon|"
+                  r"kirby|donkey\s*kong|smash|minecraft|metroid)\b", re.I)
 USED = re.compile(r"ikinci\s*el|2\.\s*el|\bused\b|az\s*kullan|temiz|kullanılmış|kullanilmis|"
                   r"s[ıi]f[ıi]r\s*(ayar|gibi)", re.I)
 NEW = re.compile(r"\bsıfır\b(?!\s*ayar)|\bsifir\b(?!\s*ayar)|kapalı\s*kutu|\bnew\b|faturalı|garantili", re.I)
 NOT_HANDHELD = re.compile(r"lavabo|banyo|dolab[ıi]|mobilya|yatak|koltuk|masa\b|sandalye|halı|perde|ayakkab|"
                           r"musluk|eviye|batarya|duş\s*set|armatür|bardak|çay\s*seti|kitab[ıi]|roman\b|mont\b|"
                           r"\brtx\s*\d|\bgtx\b|nvme|ddr[45]|oem\s*set|anakart|ekran\s*kart|masaüstü|kasa\b|"
+                          r"gimbal|osmo|aksiyon\s*kamera|hoparlör|saç\s*kurutma|\bdrone\b|"
                           r"elbise|tişört|parfüm|mutfak|tencere", re.I)
 WANTED = re.compile(r"al[ıi]n[ıi]k|al[ıi]n[ıi]r\b|ar[ıi]yorum|aran[ıi]yor|\bwtb\b|almak\s*istiyorum", re.I)
 NEW_STRONG = re.compile(r"\bs[ıi]f[ıi]r\b(?!\s*(ayar|gibi))|kapal[ıi]\s*kutu|ac[ıi]lmam[ıi]ş|\bmühürlü\b|\bbrand\s*new\b", re.I)
