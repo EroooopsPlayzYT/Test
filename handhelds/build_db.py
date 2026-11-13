@@ -170,7 +170,7 @@ NOT_DEVICE = re.compile(r"kılıf|kilif|çanta|canta|koruyucu|temperli|\bcam\b|g
 def variant(title):
     """'8GB/128GB' style RAM/storage from a title, as far as it can be told."""
     t = title.lower()
-    ram = (re.search(r"(\d{1,2})\s*gb\s*(?:ram|lpddr)", t) or re.search(r"ram\s*:?\s*(\d{1,2})\s*gb", t)
+    ram = (re.search(r"(\d{1,2})\s*gb\s*(?:ram|lpddr|/\s*\d)", t) or re.search(r"ram\s*:?\s*(\d{1,2})\s*gb", t)
            or re.search(r"(?<![\d.])(\d{1,2})\s*/\s*(?:\d{3,4}\b|\d\s*tb)", t) or re.search(r"(?<![\d.])(\d{1,2})\s*gb\s*\+", t))
     rom = (re.search(r"(?<![\d.])\d{1,2}\s*/\s*(\d{3,4})\b", t) or re.search(r"(\d{3,4})\s*gb(?!\s*ram)", t)
            or re.search(r"(\d)\s*tb", t))
