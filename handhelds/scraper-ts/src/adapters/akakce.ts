@@ -21,7 +21,9 @@ export const akakce: Adapter = {
         if (!href || cards.some((c) => c.id === $(li).attr("data-pr"))) return;
         const title = ($(li).find("h3").text() || a.attr("title") || "").trim();
         // Only open product pages that match every query word (no "pocket" mattresses).
-        if (words.length && !words.every((w) => title.toLowerCase().includes(w))) return;
+        // whole-word match ("ayn" must not match "aynalı" = mirrored)
+        const low = title.toLocaleLowerCase("tr-TR");
+        if (words.length && !words.every((w) => new RegExp(`(^|[^\\p{L}\\d])${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}($|[^\\p{L}\\d])`, "u").test(low))) return;
         cards.push({
           id: $(li).attr("data-pr")!,
           title: ($(li).find("h3").text() || a.attr("title") || "").trim(),
