@@ -29,9 +29,22 @@ Accessories (cases, films, grips, chargers…) are dropped unless you pass `--in
 | `amazontr` | Search result cards (ported from `amazontr.py`) | ✅ works, sometimes 503 |
 | `gaming.gen.tr`, `woocommerce:<domain>` | WooCommerce Store API | ✅ works |
 | `shopify:<domain>` | Shopify `/products.json` | for any Shopify shop |
-| `trendyol` | Ported from `trendyol.py` | ⛔ Trendyol's robots.txt disallows `/sr` (search), so it stops |
+| `trendyol` | **ProductScrape's original `trendyol.py`, unmodified** (git submodule `handhelds/vendor/ProductScrape`, run via `py/run_trendyol.py`; needs `pip install beautifulsoup4 lxml`) | ⛔ 403 from cloud servers; may work from a home connection. Note Trendyol's robots.txt disallows `/sr` and `trendyol.py` does not check robots |
+| `trendyol-ts` | TypeScript re-implementation of the same search | stops on robots.txt (`/sr` disallowed) |
 
 Blocked or disallowed sources are logged in the `runs` table (`blocked` / `robots`) and skipped.
+
+## Kept from ProductScrape
+
+* `trendyol.py` itself, byte-for-byte (submodule). The wrapper only runs it in a temp dir, waits for
+  **all** its threads (the original joins only the last one), and turns errors into JSON.
+* `main.py`'s interactive mode: run with no flags and it asks `Search by product...` and
+  `How many results do you want?`, quitting with the same messages on a non-number.
+* ProductCard output (`id`, `title`, `price`, `link`) in `out/results<site>.json` and `out/results.json`,
+  now as valid JSON arrays. The price text keeps `"Not available, please view the product page"`.
+* Amazon: search URL, the `keywords` organic-link rule, `slredirect` / `/gp/` ad filtering, ASIN from
+  `dp/<ASIN>`, and the per-product page read (`#productTitle`, first `.a-offscreen`).
+* Multithreading (now a bounded pool), timeouts, the 208-page Trendyol cap, the unit tests (ported).
 
 ## What changed vs ProductScrape
 

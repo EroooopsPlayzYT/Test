@@ -55,7 +55,7 @@ export function parseTrendyolSearch(html: string): Omit<Product, "scrapedAt">[] 
 }
 
 export const trendyol: Adapter = {
-  name: "trendyol",
+  name: "trendyol-ts",
   async search(query, limit) {
     const out: Product[] = [];
     const pages = Math.min(Math.ceil(limit / PER_PAGE), 208); // ProductScrape: max 208 pages

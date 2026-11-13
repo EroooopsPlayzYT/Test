@@ -47,3 +47,21 @@ test("amazon cards", () => {
   assert.equal(rows.length, 1);
   assert.equal(rows[0].priceTry, 39999);
 });
+
+import { asinCode, parseAmazonProduct } from "../src/adapters/amazontr.js";
+
+test("amazon asincode + keywords rule (from amazontr.py)", () => {
+  assert.equal(asinCode("https://www.amazon.com.tr/Valve-Steam-Deck/dp/B0ABC12345/ref=sr_1_1?keywords=steam+deck"), "B0ABC12345");
+  const html = `<div data-asin="B0ORG"><a href="/Steam-Deck/dp/B0ORG/ref=sr_1_1?keywords=steam+deck"><h2>Steam Deck</h2></a>
+    <span class="a-price"><span class="a-offscreen">39.999,00 TL</span></span></div>
+    <div data-asin="B0AD"><a href="/gp/slredirect/picassoRedirect.html/dp/B0AD?keywords=x"><h2>Ad</h2></a></div>`;
+  const rows = parseAmazonSearch(html);
+  assert.deepEqual(rows.map((r) => r.id), ["B0ORG"]);
+});
+
+test("amazon product page (detailedparser)", () => {
+  const d = parseAmazonProduct(`<span id="productTitle">  Valve Steam Deck OLED  </span><span class="a-offscreen">51.999,00 TL</span>`);
+  assert.equal(d.title, "Valve Steam Deck OLED");
+  assert.equal(d.price, 51999);
+  assert.equal(parseAmazonProduct(`<span class="a-offscreen">$499</span>`).price, null);
+});

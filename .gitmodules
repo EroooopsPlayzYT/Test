@@ -1,0 +1,3 @@
+[submodule "handhelds/vendor/ProductScrape"]
+	path = handhelds/vendor/ProductScrape
+	url = https://github.com/muratcansarkalkan/ProductScrape

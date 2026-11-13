@@ -2,11 +2,13 @@
 //   npm run scrape -- --query "steam deck" --limit 30
 //   npm run scrape -- --query "retroid pocket" --sources akakce,idefix --db out/prices.db
 //   npm run scrape -- --queries queries.txt --sources akakce,trendyol,amazontr
-// ProductScrape asked for the query and limit with input(); this takes flags so it can run
-// on a schedule, writes JSON Lines (valid line by line) and SQLite, and logs blocked sources.
-import { mkdirSync, appendFileSync, readFileSync } from "node:fs";
-import { dirname } from "node:path";
+//   npm run scrape            (no flags: asks "Search by product..." like ProductScrape main.py)
+// Flags let it run on a schedule. Writes SQLite, JSON Lines and ProductScrape-style
+// results<site>.json / results.json, and logs blocked or disallowed sources.
+import { mkdirSync, appendFileSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { parseArgs } from "node:util";
+import { createInterface } from "node:readline";
 import { BlockedError, RobotsDisallowedError } from "./http.js";
 import { openDb, saveProducts, logRun } from "./db.js";
 import type { Adapter } from "./types.js";
@@ -16,10 +18,13 @@ import { trendyol } from "./adapters/trendyol.js";
 import { amazontr } from "./adapters/amazontr.js";
 import { woocommerce, shopify } from "./adapters/shops.js";
 import { donanimhaber } from "./adapters/donanimhaber.js";
+import { trendyolPy } from "./adapters/trendyol-py.js";
 import { isDevice } from "./types.js";
 
 const ADAPTERS: Record<string, Adapter> = {
-  akakce, idefix, trendyol, amazontr,
+  akakce, idefix, amazontr,
+  trendyol: trendyolPy,          // ProductScrape trendyol.py, unmodified
+  "trendyol-ts": trendyol,       // TypeScript re-implementation
   "gaming.gen.tr": woocommerce("www.gaming.gen.tr"),
   donanimhaber: donanimhaber(Number(process.env.DH_PAGES ?? 10)),
 };
@@ -44,12 +49,32 @@ const { values } = parseArgs({
   },
 });
 
-const queries = values.queries
+let queries = values.queries
   ? readFileSync(values.queries, "utf8").split("\n").map((s) => s.trim()).filter(Boolean)
   : values.query ? [values.query] : [];
-const limit = Number(values.limit);
-if (!queries.length || !Number.isInteger(limit) || limit < 1) {
-  console.error('Give --query "steam deck" (or --queries file.txt) and a numeric --limit.');
+let limit = Number(values.limit);
+
+// ProductScrape main.py behaviour: with no query flag, ask interactively.
+if (!queries.length) {
+  const rl = createInterface({ input: process.stdin });
+  const lines = rl[Symbol.asyncIterator]();          // works for typed and piped input
+  const ask = async (prompt: string) => {
+    process.stdout.write(prompt);
+    const { value, done } = await lines.next();
+    return done ? "" : String(value);
+  };
+  queries = [await ask("Search by product...")];
+  const answer = await ask("How many results do you want?");
+  rl.close();
+  limit = Number(answer);
+  if (!answer.trim() || !Number.isInteger(limit) || limit < 1) {
+    console.log("No, please give a number!");
+    console.log("As you didn't give a number, I will quit.");
+    process.exit(1);
+  }
+}
+if (!Number.isInteger(limit) || limit < 1) {
+  console.error("--limit must be a positive whole number.");
   process.exit(1);
 }
 
@@ -58,8 +83,15 @@ mkdirSync(dirname(values.jsonl!), { recursive: true });
 const db = openDb(values.db!);
 const sources = values.sources!.split(",").map((s) => resolve(s.trim()));
 
+// ProductScrape wrote results<site>.json files with ProductCard objects (id, title, price, link).
+// Kept, as valid JSON arrays, next to the JSON Lines file.
+const cards = new Map<string, { id: string; title: string; price: string; link: string; query: string }[]>();
+const cardFile = (src: string) =>
+  join(dirname(values.jsonl!), `results${src.replace(/[^a-z0-9.]+/gi, "_")}.json`);
+
+console.log("Looking up...");
 for (const query of queries) {
-  // Sources run in parallel (different hosts); each host is rate-limited inside http.ts.
+  // Sources run in parallel (different hosts), like main.py's threads; each host is rate-limited in http.ts.
   await Promise.all(sources.map(async (src) => {
     const started = new Date().toISOString();
     try {
@@ -67,13 +99,24 @@ for (const query of queries) {
       const rows = values["include-accessories"] ? all : all.filter((r) => isDevice(r.title));
       saveProducts(db, rows, query);
       for (const r of rows) appendFileSync(values.jsonl!, JSON.stringify({ ...r, query }) + "\n");
+      const list = cards.get(src.name) ?? [];
+      list.push(...rows.map((r) => ({
+        id: r.id, title: r.title, link: r.url, query,
+        price: r.priceTry != null ? `${r.priceTry.toLocaleString("tr-TR")} TL`
+                                  : "Not available, please view the product page",
+      })));
+      cards.set(src.name, list);
+      writeFileSync(cardFile(src.name), JSON.stringify(list, null, 1));
       logRun(db, src.name, query, "ok", null, rows.length, started);
       console.log(`✓ ${src.name.padEnd(28)} "${query}": ${rows.length} rows`);
     } catch (e) {
       const status = e instanceof BlockedError ? "blocked" : e instanceof RobotsDisallowedError ? "robots" : "error";
       logRun(db, src.name, query, status, (e as Error).message, 0, started);
       console.log(`✗ ${src.name.padEnd(28)} "${query}": ${status} (${(e as Error).message})`);
+      console.log(`  Sorry, we could not find any products regarding your search from ${src.name}.`);
     }
   }));
 }
+writeFileSync(join(dirname(values.jsonl!), "results.json"),
+              JSON.stringify([...cards.values()].flat(), null, 1));
 db.close();
