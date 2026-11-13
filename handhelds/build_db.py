@@ -82,6 +82,17 @@ CREATE TABLE IF NOT EXISTS sahibinden_searches (
     category_url TEXT,          -- verified category page (from search results), if known
     search_url   TEXT NOT NULL  -- keyword search inside the console category
 );
+CREATE TABLE IF NOT EXISTS search_index_listings (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    source      TEXT NOT NULL,  -- site the listing is on (cimri, itopya.com, ...)
+    model       TEXT,
+    title       TEXT NOT NULL,
+    price_try   REAL,           -- as shown in a search-engine snippet; may be stale
+    offer_count INTEGER,
+    in_stock    INTEGER,
+    seen_date   TEXT,
+    url         TEXT UNIQUE     -- found via web search; the site itself was not fetched
+);
 CREATE TABLE IF NOT EXISTS shop_products (
     id        INTEGER PRIMARY KEY AUTOINCREMENT,
     shop      TEXT NOT NULL,   -- domain scraped directly
@@ -130,6 +141,7 @@ def main():
     db.executescript("DROP VIEW IF EXISTS small_shop_offers; DROP TABLE IF EXISTS offers;"
                      "DROP TABLE IF EXISTS shop_products; DROP TABLE IF EXISTS reviews;"
                      "DROP TABLE IF EXISTS sahibinden_listings; DROP TABLE IF EXISTS sahibinden_searches;"
+                     "DROP TABLE IF EXISTS search_index_listings;"
                      "DROP TABLE IF EXISTS handhelds;" + SCHEMA)
     today = date.today().isoformat()
     db.executemany(
@@ -174,6 +186,17 @@ def main():
             db.execute("INSERT OR IGNORE INTO sahibinden_listings (model, kind, title, price_try, location, url)"
                        " VALUES (?,?,?,?,?,?)", (s.get("model"), s.get("kind", "ad"), s["title"],
                                                  s.get("price_try"), s.get("snippet_location"), s["url"]))
+    for path in sorted(glob.glob("data/search_*.jsonl")):
+        for line in open(path, encoding="utf-8"):
+            if not line.strip():
+                continue
+            s = json.loads(line)
+            stock = s.get("in_stock")
+            db.execute("INSERT OR IGNORE INTO search_index_listings (source, model, title, price_try, offer_count,"
+                       " in_stock, seen_date, url) VALUES (?,?,?,?,?,?,?,?)",
+                       (s.get("source"), s.get("model"), s.get("title") or "", s.get("price_try"),
+                        s.get("offer_count"), None if stock is None else int(bool(stock)),
+                        s.get("seen_date"), s.get("url")))
     db.executemany("INSERT INTO sahibinden_searches VALUES (?, ?, ?)",
                    [(m, SAHIBINDEN_CATEGORIES.get(m), SAHIBINDEN_SEARCH.format(q=quote_plus(m)))
                     for m in SAHIBINDEN_MODELS])
