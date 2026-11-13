@@ -146,6 +146,8 @@ def main(domain, platform, out, template=None):
                 if not p["title"] or p["url"] in seen or not is_device(p["title"]):
                     continue
                 seen.add(p["url"])
+                if not p.get("price_try"):
+                    p["price_try"] = None  # 0 means "no price shown" (usually out of stock)
                 p.update(shop=domain, platform=platform)
                 f.write(json.dumps(p, ensure_ascii=False) + "\n")
                 n += 1

@@ -1,0 +1,146 @@
+[
+ {
+  "domain": "www.gaming.gen.tr",
+  "accessible": true,
+  "robots_allows_products": true,
+  "platform": "WooCommerce",
+  "search_url_template": "https://www.gaming.gen.tr/?s={q}&post_type=product",
+  "notes": "Beta Oyun Teknoloji; WC Store API works: /wp-json/wc/store/v1/products?search={q}&per_page=N (returned ASUS ROG Ally). robots disallows only admin/cart/checkout. Best lead."
+ },
+ {
+  "domain": "gamepad.com.tr",
+  "accessible": true,
+  "robots_allows_products": true,
+  "platform": "WooCommerce (store API route 404)",
+  "search_url_template": "https://gamepad.com.tr/?s={q}&post_type=product",
+  "notes": "Search returned Switch/handheld term hits (15); robots only disallows wp-admin. wc/store/v1 not exposed; parse HTML."
+ },
+ {
+  "domain": "gamegaraj.com",
+  "accessible": true,
+  "robots_allows_products": true,
+  "platform": "Custom (Nex4biz CMS, not Shopify)",
+  "search_url_template": "https://gamegaraj.com/arama?q={q}",
+  "notes": "Gaming PC/component shop. robots disallows only cart/account/product-custom/tr. /arama?q= returns 200 with steam deck hits(7) but no ROG Ally hits; verify handheld stock."
+ },
+ {
+  "domain": "ucuzbudur.com",
+  "accessible": true,
+  "robots_allows_products": false,
+  "platform": "Custom PHP",
+  "search_url_template": "https://ucuzbudur.com/arama?q={q}",
+  "notes": "Console/PS5/Switch shop (in DB as independent seller). robots.txt Disallow: /arama and /*?page= and /*?flt= so search/pagination disallowed; use category pages only. /arama?q= gave 404 for me."
+ },
+ {
+  "domain": "datafrog.com.tr",
+  "accessible": true,
+  "robots_allows_products": true,
+  "platform": "Ticimax",
+  "search_url_template": "https://www.datafrog.com.tr/arama?q={q}",
+  "notes": "Hiremco/Datafrog; homepage is satellite/TV box; forum says it sold Anbernic. Search had 4 handheld hits. robots.txt returned HTML (no rules)."
+ },
+ {
+  "domain": "konsolburada.com",
+  "accessible": true,
+  "robots_allows_products": true,
+  "platform": "Custom ASP.NET classifieds",
+  "search_url_template": "",
+  "notes": "Console classifieds marketplace (listings), not a shop; no search URL verified (/search?q= 404)."
+ },
+ {
+  "domain": "oyunmerkezi.com.tr",
+  "accessible": true,
+  "robots_allows_products": true,
+  "platform": "Joomla",
+  "search_url_template": "https://oyunmerkezi.com.tr/arama?q={q}",
+  "notes": "Looks like content site, only 2 hits; low value."
+ },
+ {
+  "domain": "oyunkonsol.com",
+  "accessible": true,
+  "robots_allows_products": true,
+  "platform": "unknown (title 'OyunKonsol - Oyun Dunyasinin Canli Nabzi')",
+  "search_url_template": "",
+  "notes": "Appears to be news site, not a shop."
+ },
+ {
+  "domain": "kolaybilgisayar.com",
+  "accessible": true,
+  "robots_allows_products": true,
+  "platform": "unknown",
+  "search_url_template": "",
+  "notes": "General computer shop; /arama?q= 404; search pattern unknown, not checked for handhelds."
+ },
+ {
+  "domain": "gencbilisim.com.tr",
+  "accessible": true,
+  "robots_allows_products": true,
+  "platform": "unknown (WordPress-style ?s= returns 200, 0 handheld hits)",
+  "search_url_template": "https://gencbilisim.com.tr/?s={q}",
+  "notes": "No handheld hits."
+ },
+ {
+  "domain": "incehesap.com",
+  "accessible": false,
+  "robots_allows_products": false,
+  "platform": "unknown",
+  "search_url_template": "",
+  "notes": "Homepage 403 (bot block); Google shows Ayaneo Geek/Air listings (/ayaneo/). BLOCKED, not bypassed."
+ },
+ {
+  "domain": "itopya.com",
+  "accessible": false,
+  "robots_allows_products": false,
+  "platform": "unknown",
+  "search_url_template": "",
+  "notes": "403 on homepage and robots. BLOCKED."
+ },
+ {
+  "domain": "sinerji.gen.tr",
+  "accessible": false,
+  "robots_allows_products": false,
+  "platform": "unknown",
+  "search_url_template": "",
+  "notes": "403. BLOCKED."
+ },
+ {
+  "domain": "oyunfor.com",
+  "accessible": false,
+  "robots_allows_products": true,
+  "platform": "unknown",
+  "search_url_template": "",
+  "notes": "Homepage 403 (robots 200, no disallow). BLOCKED."
+ },
+ {
+  "domain": "teknobiyotik.com",
+  "accessible": false,
+  "robots_allows_products": false,
+  "platform": "unknown",
+  "search_url_template": "",
+  "notes": "403 Cloudflare. BLOCKED."
+ },
+ {
+  "domain": "tebilon.com",
+  "accessible": false,
+  "robots_allows_products": false,
+  "platform": "unknown",
+  "search_url_template": "",
+  "notes": "Cloudflare 'Just a moment'. BLOCKED."
+ },
+ {
+  "domain": "mavibilgisayar.com",
+  "accessible": false,
+  "robots_allows_products": false,
+  "platform": "unknown",
+  "search_url_template": "",
+  "notes": "403. BLOCKED."
+ },
+ {
+  "domain": "turkcell.com.tr/pasaj",
+  "accessible": null,
+  "robots_allows_products": null,
+  "platform": "unknown",
+  "search_url_template": "",
+  "notes": "Not probed; search shows Anbernic RG406H/RG28XX & PS Portal listings on Pasaj (carrier marketplace, not small shop)."
+ }
+]
