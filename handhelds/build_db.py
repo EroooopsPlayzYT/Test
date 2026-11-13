@@ -18,6 +18,9 @@ SAHIBINDEN_CATEGORIES = {
     "Switch 2": "https://www.sahibinden.com/oyunculara-ozel-oyun-konsolu-nintendo-switch-2",
     "Retroid Pocket": "https://www.sahibinden.com/oyunculara-ozel-oyun-konsolu-retroid",
     "PS Vita": "https://www.sahibinden.com/ps-vita",
+    "Nintendo 3DS": "https://www.sahibinden.com/nintendo-ds",
+    "Nintendo 2DS": "https://www.sahibinden.com/nintendo-ds",
+    "El Atarisi": "https://www.sahibinden.com/arama?category=243472",
 }
 SAHIBINDEN_MODELS = [
     "Steam Deck", "Steam Deck OLED", "ROG Ally", "ROG Ally X", "ROG Xbox Ally", "Legion Go",
