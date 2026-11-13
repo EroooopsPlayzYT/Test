@@ -12,6 +12,21 @@ SOLD = re.compile(r"\bsatıldı\b|\bsatildi\b|\bsold\b", re.I)
 BUNDLE = re.compile(r"\+\s*\w*\s*oyun|bundle|\bset\b|hediye|\+\s*(sd|kart|çanta|kılıf)|full\s*set", re.I)
 
 
+class _Num:
+    def __init__(self, n):
+        self.n = n
+
+    def group(self, _):
+        return str(self.n)
+
+
+def _largest_gb(t):
+    """Biggest 'NNN GB' that isn't RAM: storage in '12GB+256GB' is 256, not 12."""
+    nums = [int(m) for m in re.findall(r"(\d{2,4})\s*gb(?!\s*(?:ram|lpddr|/))", t)]
+    nums = [n for n in nums if n >= 32]
+    return _Num(max(nums)) if nums else None
+
+
 def variant(title):
     """(ram_gb, storage_gb) from a title; storage in GB (1TB -> 1024). Unknown -> None."""
     t = (title or "").lower()
@@ -20,7 +35,7 @@ def variant(title):
            or re.search(r"(?<![\d.])(\d{1,2})\s*gb\s*\+", t))
     rom = (re.search(r"(?<![\d.])\d{1,2}\s*(?:gb)?\s*/\s*(\d{3,4})\b", t)
            or re.search(r"(?<![\d.])\d{1,2}\s*(?:gb)?\s*/\s*(\d)\s*tb", t)
-           or re.search(r"(\d{2,4})\s*gb(?!\s*(?:ram|lpddr|/))", t) or re.search(r"(\d)\s*tb", t))
+           or _largest_gb(t) or re.search(r"(\d)\s*tb", t))
     ram_gb = int(ram.group(1)) if ram else None
     storage_gb = None
     if rom:
