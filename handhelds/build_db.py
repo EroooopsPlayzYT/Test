@@ -37,6 +37,17 @@ CREATE TABLE IF NOT EXISTS offers (
 );
 CREATE INDEX IF NOT EXISTS idx_offer_product ON offers(akakce_id);
 CREATE INDEX IF NOT EXISTS idx_offer_seller ON offers(seller);
+CREATE TABLE IF NOT EXISTS shop_products (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    shop      TEXT NOT NULL,   -- domain scraped directly
+    platform  TEXT,
+    title     TEXT NOT NULL,
+    brand     TEXT,
+    price_try REAL,
+    in_stock  INTEGER,
+    url       TEXT UNIQUE
+);
+CREATE INDEX IF NOT EXISTS idx_shop ON shop_products(shop);
 CREATE VIEW IF NOT EXISTS small_shop_offers AS
     SELECT o.*, h.title FROM offers o JOIN handhelds h USING (akakce_id)
     WHERE o.marketplace IS NULL;
@@ -72,6 +83,7 @@ def main():
 
     db = sqlite3.connect("handhelds.db")
     db.executescript("DROP VIEW IF EXISTS small_shop_offers; DROP TABLE IF EXISTS offers;"
+                     "DROP TABLE IF EXISTS shop_products;"
                      "DROP TABLE IF EXISTS handhelds;" + SCHEMA)
     today = date.today().isoformat()
     db.executemany(
@@ -87,8 +99,17 @@ def main():
                 offers.append(tuple(o.get(c) for c in OFFER_COLS))
     db.executemany(f"INSERT INTO offers ({','.join(OFFER_COLS)}) VALUES ({','.join('?' * len(OFFER_COLS))})",
                    offers)
+    shop_rows = []
+    for path in sorted(glob.glob("data/shop_*.jsonl")):
+        for line in open(path, encoding="utf-8"):
+            p = json.loads(line)
+            shop_rows.append((p["shop"], p["platform"], p["title"], p.get("brand"), p.get("price_try"),
+                              None if p.get("in_stock") is None else int(bool(p["in_stock"])), p["url"]))
+    db.executemany("INSERT OR IGNORE INTO shop_products (shop, platform, title, brand, price_try, in_stock, url)"
+                   " VALUES (?,?,?,?,?,?,?)", shop_rows)
     db.commit()
-    print(f"{len(rows)} unique handhelds, {len(offers)} offers -> handhelds.db")
+    n_shop = db.execute("SELECT count(*) FROM shop_products").fetchone()[0]
+    print(f"{len(rows)} unique handhelds, {len(offers)} offers, {n_shop} small-shop products -> handhelds.db")
 
 
 if __name__ == "__main__":
