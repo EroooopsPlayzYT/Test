@@ -132,6 +132,63 @@ def category(url):
     return m.group(1) if m else None
 
 
+PRIORITY = [  # (model label, regex on lowercased title); first match wins, most specific first
+    ("Retroid Pocket 6", r"retroid\s*pocket\s*6|\brp\s*6\b"),
+    ("AYN Odin 3", r"odin\s*3"),
+    ("AYN Odin 2 Portal", r"odin\s*2\s*portal"),
+    ("AYN Odin 2 Mini", r"odin\s*2\s*mini"),
+    ("AYN Odin 2", r"odin\s*2"),
+    ("AYN Thor", r"\bayn\b.*\bthor\b|\bthor\b.*\bayn\b"),
+    ("AYN Odin", r"\bodin\b"),
+    ("Retroid Pocket 5", r"retroid\s*pocket\s*5|\brp\s*5\b"),
+    ("Retroid Pocket Mini", r"retroid\s*pocket\s*mini"),
+    ("Retroid Pocket Flip 2", r"retroid\s*pocket\s*flip\s*2"),
+]
+NOT_DEVICE = re.compile(r"kılıf|kilif|çanta|canta|koruyucu|temperli|\bcam\b|grip|stand|şarj|sarj|kablo|"
+                        r"thumb|analog|sticker|kaplama|case|skin|film|dock|silikon", re.I)
+
+
+def variant(title):
+    """'8GB/128GB' style RAM/storage from a title, as far as it can be told."""
+    t = title.lower()
+    ram = (re.search(r"(\d{1,2})\s*gb\s*(?:ram|lpddr)", t) or re.search(r"ram\s*:?\s*(\d{1,2})\s*gb", t)
+           or re.search(r"(?<![\d.])(\d{1,2})\s*/\s*(?:\d{3,4}\b|\d\s*tb)", t) or re.search(r"(?<![\d.])(\d{1,2})\s*gb\s*\+", t))
+    rom = (re.search(r"(?<![\d.])\d{1,2}\s*/\s*(\d{3,4})\b", t) or re.search(r"(\d{3,4})\s*gb(?!\s*ram)", t)
+           or re.search(r"(\d)\s*tb", t))
+    r = ram.group(1) if ram else None
+    m = rom.group(1) if rom else None
+    if m:
+        m = f"{m}TB" if len(m) == 1 else f"{m}GB"
+    return f"{r + 'GB' if r else '?'}/{m or '?'}" if (r or m) else None
+
+
+def build_priority(db):
+    db.executescript("""DROP TABLE IF EXISTS priority_watchlist;
+    CREATE TABLE priority_watchlist (
+        model TEXT, variant TEXT, title TEXT, price_try REAL, condition TEXT,
+        source_table TEXT, source TEXT, url TEXT, seen TEXT);""")
+    queries = [
+        ("handhelds", "SELECT title, min_price_try, 'new', 'akakce', url, scraped_on FROM handhelds"),
+        ("offers", "SELECT h.title || ' [' || COALESCE(o.listing_title,'') || ']', o.price_try, 'new', "
+                   "COALESCE(o.marketplace || '/', '') || o.seller, h.url, h.scraped_on "
+                   "FROM offers o JOIN handhelds h USING (akakce_id)"),
+        ("shop_products", "SELECT title, price_try, 'new', shop, url, NULL FROM shop_products"),
+        ("search_index_listings", "SELECT title, price_try, NULL, source, url, seen_date FROM search_index_listings"),
+        ("used_listings", "SELECT title, price_try, 'used' || CASE WHEN sold THEN ' (sold)' ELSE '' END, source, url, scraped_at FROM used_listings"),
+        ("sahibinden_listings", "SELECT title, price_try, condition, 'sahibinden', COALESCE(url, 'ilan ' || ilan_no), listed_date FROM sahibinden_listings WHERE kind='ad'"),
+    ]
+    rows = []
+    for table, q in queries:
+        for title, price, cond, source, url, seen in db.execute(q):
+            low = (title or "").lower()
+            model = next((m for m, rx in PRIORITY if re.search(rx, low)), None)
+            if not model or NOT_DEVICE.search(low):
+                continue
+            rows.append((model, variant(title), title, price, cond, table, source, url, seen))
+    db.executemany("INSERT INTO priority_watchlist VALUES (?,?,?,?,?,?,?,?,?)", rows)
+    print(f"priority_watchlist: {len(rows)} rows")
+
+
 def main():
     rows = {}
     for path in sorted(glob.glob("data/part_*.jsonl")):
@@ -233,6 +290,7 @@ def main():
     db.executemany("INSERT INTO sahibinden_searches VALUES (?, ?, ?)",
                    [(m, SAHIBINDEN_CATEGORIES.get(m), SAHIBINDEN_SEARCH.format(q=quote_plus(m)))
                     for m in SAHIBINDEN_MODELS])
+    build_priority(db)
     db.commit()
     n_shop =db.execute("SELECT count(*) FROM shop_products").fetchone()[0]
     print(f"{len(rows)} unique handhelds, {len(offers)} offers, {len(review_rows)} reviews, "
