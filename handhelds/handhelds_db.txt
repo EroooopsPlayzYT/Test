@@ -1,4 +1,4 @@
-handhelds.db text export, 2026-11-13 22:22 UTC
+handhelds.db text export, 2026-11-13 22:23 UTC
 Contents: priority_deals (view), best_deals (view), priority_watchlist (table), listings_unified (table), handhelds (table), ml_metrics (table), offers (table), reviews (table), sahibinden_listings (table), sahibinden_searches (table), scraper_observations (table), search_index_listings (table), shop_products (table), small_shop_offers (view), used_listings (table)
 
 ====================================================================================================
@@ -6558,10 +6558,10 @@ ml_metrics  (4 rows)
 ====================================================================================================
 name                          value                                                         trained_at
 ----------------------------  ------------------------------------------------------------  --------------------------------
-title_classifier_cv_accuracy  0.986846038863976                                             2026-11-13T22:22:38.145634+00:00
-chosen                        "gradient_boosting"                                           2026-11-13T22:22:38.145634+00:00
-cv_median_abs_pct_error       {"ridge_onehot": 0.29575526698728705, "gradient_boosting": …  2026-11-13T22:22:38.145634+00:00
-n_train                       3185                                                          2026-11-13T22:22:38.145634+00:00
+title_classifier_cv_accuracy  0.986846038863976                                             2026-11-13T22:23:29.563935+00:00
+chosen                        "gradient_boosting"                                           2026-11-13T22:23:29.563935+00:00
+cv_median_abs_pct_error       {"ridge_onehot": 0.29575526698728705, "gradient_boosting": …  2026-11-13T22:23:29.563935+00:00
+n_train                       3185                                                          2026-11-13T22:23:29.563935+00:00
 
 ====================================================================================================
 offers  (2641 rows)

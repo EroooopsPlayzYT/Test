@@ -1,0 +1,56 @@
+[
+  {
+    "engine": "WebSearch (built-in)",
+    "robots_allows_search": null,
+    "reachable": true,
+    "notes": "Used, extended mode, instagram/facebook/sahibinden blocked; ~13 queries"
+  },
+  {
+    "engine": "html.duckduckgo.com",
+    "robots_allows_search": null,
+    "reachable": false,
+    "notes": "Connection reset by peer; robots.txt unreadable; not queried"
+  },
+  {
+    "engine": "lite.duckduckgo.com",
+    "robots_allows_search": true,
+    "reachable": false,
+    "notes": "robots Allow: /; first request returned HTTP 202 anti-bot challenge; stopped after 1 request"
+  },
+  {
+    "engine": "www.mojeek.com",
+    "robots_allows_search": false,
+    "reachable": true,
+    "notes": "robots Disallow: /search; skipped"
+  },
+  {
+    "engine": "search.marginalia.nu",
+    "robots_allows_search": false,
+    "reachable": true,
+    "notes": "Redirects to marginalia-search.com; robots Disallow: /search; skipped"
+  },
+  {
+    "engine": "www.bing.com",
+    "robots_allows_search": false,
+    "reachable": true,
+    "notes": "robots Disallow: /search; skipped"
+  },
+  {
+    "engine": "yandex.com.tr",
+    "robots_allows_search": false,
+    "reachable": true,
+    "notes": "robots Disallow includes /search and /?; skipped"
+  },
+  {
+    "engine": "search.brave.com",
+    "robots_allows_search": false,
+    "reachable": true,
+    "notes": "robots Disallow: /search; skipped"
+  },
+  {
+    "engine": "www.startpage.com",
+    "robots_allows_search": null,
+    "reachable": false,
+    "notes": "robots.txt request returned Access Denied page; stopped"
+  }
+]
