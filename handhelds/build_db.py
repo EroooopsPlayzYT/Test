@@ -97,6 +97,17 @@ CREATE TABLE IF NOT EXISTS search_index_listings (
     seen_date   TEXT,
     url         TEXT UNIQUE     -- found via web search; the site itself was not fetched
 );
+CREATE TABLE IF NOT EXISTS used_listings (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    source     TEXT NOT NULL,   -- donanimhaber (forum second-hand section)
+    listing_id TEXT,
+    title      TEXT NOT NULL,
+    price_try  REAL,
+    sold       INTEGER,         -- 1 = SATILDI
+    condition  TEXT,
+    url        TEXT UNIQUE,     -- no usernames or contact details stored
+    scraped_at TEXT
+);
 CREATE TABLE IF NOT EXISTS shop_products (
     id        INTEGER PRIMARY KEY AUTOINCREMENT,
     shop      TEXT NOT NULL,   -- domain scraped directly
@@ -145,7 +156,7 @@ def main():
     db.executescript("DROP VIEW IF EXISTS small_shop_offers; DROP TABLE IF EXISTS offers;"
                      "DROP TABLE IF EXISTS shop_products; DROP TABLE IF EXISTS reviews;"
                      "DROP TABLE IF EXISTS sahibinden_listings; DROP TABLE IF EXISTS sahibinden_searches;"
-                     "DROP TABLE IF EXISTS search_index_listings;"
+                     "DROP TABLE IF EXISTS search_index_listings; DROP TABLE IF EXISTS used_listings;"
                      "DROP TABLE IF EXISTS handhelds;" + SCHEMA)
     today = date.today().isoformat()
     db.executemany(
@@ -210,6 +221,15 @@ def main():
                        (s.get("source"), s.get("model"), s.get("title") or "", s.get("price_try"),
                         s.get("offer_count"), None if stock is None else int(bool(stock)),
                         s.get("seen_date"), s.get("url")))
+    for path in sorted(glob.glob("data/donanimhaber*.jsonl")):
+        for line in open(path, encoding="utf-8"):
+            u = json.loads(line)
+            db.execute("INSERT OR IGNORE INTO used_listings (source, listing_id, title, price_try, sold, condition,"
+                       " url, scraped_at) VALUES (?,?,?,?,?,?,?,?)",
+                       (u["source"], u["id"], u["title"],
+                        u["priceTry"] if (u.get("priceTry") or 0) >= 100 else None,  # 1 TL = "make an offer"
+                        None if u.get("inStock") is None else int(u["inStock"] is False),
+                        u.get("condition"), u["url"], u.get("scrapedAt")))
     db.executemany("INSERT INTO sahibinden_searches VALUES (?, ?, ?)",
                    [(m, SAHIBINDEN_CATEGORIES.get(m), SAHIBINDEN_SEARCH.format(q=quote_plus(m)))
                     for m in SAHIBINDEN_MODELS])

@@ -29,8 +29,9 @@ Accessories (cases, films, grips, chargers…) are dropped unless you pass `--in
 | `amazontr` | Search result cards (ported from `amazontr.py`) | ✅ works, sometimes 503 |
 | `gaming.gen.tr`, `woocommerce:<domain>` | WooCommerce Store API | ✅ works |
 | `shopify:<domain>` | Shopify `/products.json` | for any Shopify shop |
-| `trendyol` | **ProductScrape's original `trendyol.py`, unmodified** (git submodule `handhelds/vendor/ProductScrape`, run via `py/run_trendyol.py`; needs `pip install beautifulsoup4 lxml`) | ⛔ 403 from cloud servers; may work from a home connection. Note Trendyol's robots.txt disallows `/sr` and `trendyol.py` does not check robots |
-| `trendyol-ts` | TypeScript re-implementation of the same search | stops on robots.txt (`/sr` disallowed) |
+| `trendyol` | **ProductScrape's original `trendyol.py`, unmodified** (git submodule `handhelds/vendor/ProductScrape`, run via `py/run_trendyol.py`; needs `pip install beautifulsoup4 lxml`). Instead of `/sr` (disallowed in robots.txt) the wrapper hands `Trendyol.parser()` the allowed category/brand pages | ⛔ 403 from cloud servers; try from home |
+| `trendyol-browse` | TypeScript: walks the allowed category / brand / landing pages (`-x-c108889`, `-x-b157692-c104044`, `-y-s56517`…) with `?pi=` paging, filters titles by the query | ⛔ 403 from cloud servers; try from home |
+| `trendyol-ts` | TypeScript re-implementation of `/sr` search | stops on robots.txt (`/sr` disallowed) |
 
 Blocked or disallowed sources are logged in the `runs` table (`blocked` / `robots`) and skipped.
 

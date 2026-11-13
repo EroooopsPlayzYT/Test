@@ -19,12 +19,14 @@ import { amazontr } from "./adapters/amazontr.js";
 import { woocommerce, shopify } from "./adapters/shops.js";
 import { donanimhaber } from "./adapters/donanimhaber.js";
 import { trendyolPy } from "./adapters/trendyol-py.js";
+import { trendyolBrowse } from "./adapters/trendyol-browse.js";
 import { isDevice } from "./types.js";
 
 const ADAPTERS: Record<string, Adapter> = {
   akakce, idefix, amazontr,
   trendyol: trendyolPy,          // ProductScrape trendyol.py, unmodified
-  "trendyol-ts": trendyol,       // TypeScript re-implementation
+  "trendyol-ts": trendyol,       // TypeScript re-implementation (search; stops on robots /sr)
+  "trendyol-browse": trendyolBrowse(), // category/brand pages, no /sr
   "gaming.gen.tr": woocommerce("www.gaming.gen.tr"),
   donanimhaber: donanimhaber(Number(process.env.DH_PAGES ?? 10)),
 };
