@@ -13,7 +13,7 @@ export const akakce: Adapter = {
     const cards: { id: string; title: string; url: string; price: number | null }[] = [];
     for (let page = 1; cards.length < limit && page <= 20; page++) {
       const url = `${BASE}/arama/?q=${encodeURIComponent(query)}${page > 1 ? `&p=${page}` : ""}`;
-      const $ = cheerio.load(await fetchText(url));
+      const $ = cheerio.load(await fetchText(url, { delayMs: 4000 }));
       const before = cards.length;
       $("li[data-pr]").each((_, li) => {
         const a = $(li).find("a[href]").first();
@@ -34,7 +34,7 @@ export const akakce: Adapter = {
     const now = new Date().toISOString();
     const perProduct = await pool(cards.slice(0, limit), 1, async (c) => {
       try {
-        const ld = productsFromJsonLd(await fetchText(c.url))[0];
+        const ld = productsFromJsonLd(await fetchText(c.url, { delayMs: 4000 }))[0];
         if (ld?.offers.length) {
           return ld.offers.map((o): Product => ({
             source: "akakce", id: c.id, title: c.title, priceTry: o.price, inStock: true,

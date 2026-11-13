@@ -199,18 +199,23 @@ def load_manual_listings(db, path="data/manual_listings.jsonl"):
     print(f"manual_listings: {len(rows)} rows")
 
 
-def load_scraper_observations(db, path="scraper-ts/out/prices.db"):
-    """Copy the TypeScript scraper's observations (every run, timestamped) into handhelds.db."""
-    import os
+def load_scraper_observations(db, pattern="scraper-ts/out/*.db"):
+    """Copy the TypeScript scraper's observations (every run, timestamped) from all its dbs."""
     db.execute("DROP TABLE IF EXISTS scraper_observations")
     db.execute("""CREATE TABLE scraper_observations (source TEXT, product_id TEXT, title TEXT, price_try REAL,
                   in_stock INTEGER, seller TEXT, condition TEXT, url TEXT, query TEXT, scraped_at TEXT)""")
-    if not os.path.exists(path):
-        return
-    src = sqlite3.connect(path)
-    rows = src.execute("SELECT source, product_id, title, price_try, in_stock, seller, condition, url, query, "
-                       "scraped_at FROM observations").fetchall()
-    src.close()
+    rows = []
+    for path in sorted(glob.glob(pattern)):
+        if path.endswith(("test.db", "t2.db", "t3.db")):
+            continue  # throwaway test runs
+        src = sqlite3.connect(path)
+        try:
+            rows += src.execute("SELECT source, product_id, title, price_try, in_stock, seller, condition, url, "
+                                "query, scraped_at FROM observations").fetchall()
+        except sqlite3.OperationalError:
+            pass
+        src.close()
+    rows = list(dict.fromkeys(rows))  # same observation copied into two dbs
     db.executemany("INSERT INTO scraper_observations VALUES (?,?,?,?,?,?,?,?,?,?)", rows)
     print(f"scraper_observations: {len(rows)} rows")
 

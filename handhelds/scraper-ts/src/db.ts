@@ -5,6 +5,7 @@ import type { Product } from "./types.js";
 
 export function openDb(path: string): DatabaseSync {
   const db = new DatabaseSync(path);
+  db.exec("PRAGMA busy_timeout = 30000; PRAGMA journal_mode = WAL;");   // parallel runs wait instead of failing
   db.exec(`
     CREATE TABLE IF NOT EXISTS observations (
       id          INTEGER PRIMARY KEY AUTOINCREMENT,
