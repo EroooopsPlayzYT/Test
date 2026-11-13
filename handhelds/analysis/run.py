@@ -31,7 +31,8 @@ from .parse import parse_title
 FX_CACHE = Path("data/fx_usd_try.json")
 # Shops selling only abroad. ships_to_tr: 1 yes, 0 no, None unknown.
 # goretroid: reported as not shipping to Turkey (unverified; adjust if wrong).
-SHIPPING = {"goretroid.com": 0, "ayntec.com": None}
+SHIPPING = {"goretroid.com": 0, "ayntec.com": None, "anbernic.com": None, "aliexpress.com": None,
+            "ebay.com": None, "amazon.com": None}
 # Second-hand marketplaces / forums: rows from them default to "used" when the title says nothing.
 USED_SITES = ("donanimhaber", "technopat", "letgo", "sahibinden", "dolap", "gardrops")
 
