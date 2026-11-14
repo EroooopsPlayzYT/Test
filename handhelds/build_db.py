@@ -188,13 +188,13 @@ def load_wikidata(db, path="data/wikidata.json"):
     """Handheld specs from Wikidata (CC0): release date, manufacturer, CPU, RAM."""
     import os
     db.execute("DROP TABLE IF EXISTS catalog_wikidata")
-    db.execute("""CREATE TABLE catalog_wikidata (name TEXT, release TEXT, manufacturer TEXT, cpu TEXT, ram TEXT,
-                  launch_price TEXT, wikidata TEXT PRIMARY KEY)""")
+    db.execute("""CREATE TABLE catalog_wikidata (name TEXT, catalog_model TEXT, release TEXT, manufacturer TEXT,
+                  cpu TEXT, ram TEXT, launch_price TEXT, wikidata TEXT PRIMARY KEY)""")
     if os.path.exists(path):
         rows = json.load(open(path, encoding="utf-8"))
-        db.executemany("INSERT OR IGNORE INTO catalog_wikidata VALUES (?,?,?,?,?,?,?)",
-                       [(r["name"], r["release"], r["manufacturer"], r["cpu"], r["ram"], r["launch_price"],
-                         r["wikidata"]) for r in rows])
+        db.executemany("INSERT OR IGNORE INTO catalog_wikidata VALUES (?,?,?,?,?,?,?,?)",
+                       [(r["name"], r.get("catalog_model"), r["release"], r["manufacturer"], r["cpu"], r["ram"],
+                         r["launch_price"], r["wikidata"]) for r in rows])
         print(f"catalog_wikidata: {len(rows)} models")
 
 

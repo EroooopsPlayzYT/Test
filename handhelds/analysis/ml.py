@@ -24,7 +24,8 @@ NUM_FEATURES = ["ram_gb", "storage_gb"]
 def _frame(rows):
     cats = [[str(r.get(c)) for c in CAT_FEATURES] for r in rows]
     # log size, plus "is it known" flags: an unknown RAM must not look like a tiny RAM
-    nums = [[math.log1p(float(r.get(c) or 0)) for c in NUM_FEATURES]
+    # value: parsed, else the model's typical value (imputed in run.py); flag: was it really stated?
+    nums = [[math.log1p(float(r.get(f"{c}_feat") or r.get(c) or 0)) for c in NUM_FEATURES]
             + [1.0 if r.get(c) else 0.0 for c in NUM_FEATURES] for r in rows]
     return np.array(cats, dtype=object), np.array(nums, dtype=float)
 

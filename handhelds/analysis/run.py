@@ -18,7 +18,7 @@ import re
 import sqlite3
 import urllib.request
 import warnings
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from statistics import median
@@ -31,8 +31,15 @@ from .parse import parse_title
 FX_CACHE = Path("data/fx_usd_try.json")
 # Shops selling only abroad. ships_to_tr: 1 yes, 0 no, None unknown.
 # goretroid: reported as not shipping to Turkey (unverified; adjust if wrong).
-SHIPPING = {"goretroid.com": 0, "ayntec.com": None, "anbernic.com": None, "aliexpress.com": None,
-            "ebay.com": None, "amazon.com": None}
+SHIPPING = {"goretroid.com": 0,          # reported as not shipping to TR (unverified)
+            "ayntec.com": None,           # unknown
+            "anbernic.com": None,         # unknown
+            "aliexpress.com": 1,          # ships to TR
+            "amazon.com": 1,              # AmazonGlobal ships many electronics to TR (item-dependent)
+            "ebay.com": None}             # seller-dependent: check the listing
+# rough delivery estimate in days (domestic listings: 2)
+ETA_DAYS = {"goretroid.com": 21, "ayntec.com": 21, "anbernic.com": 14, "aliexpress.com": 18,
+            "amazon.com": 10, "ebay.com": 14}
 # Second-hand marketplaces / forums: rows from them default to "used" when the title says nothing.
 MIN_TRAIN = 20   # below this, cross-validated ML is meaningless (and KFold would crash)
 USED_SITES = ("donanimhaber", "technopat", "letgo", "sahibinden", "dolap", "gardrops")
@@ -81,6 +88,9 @@ CREATE TABLE listings_unified (
     condition TEXT, sold INTEGER, bundle INTEGER, is_accessory INTEGER, wanted INTEGER, is_clone INTEGER,
     title TEXT, price_try REAL, price_usd REAL,
     ships_to_tr INTEGER, landed_cost_try REAL,   -- USD-only rows: estimated price delivered to Turkey
+    eta_days INTEGER,                            -- rough delivery time (domestic 2, imports 10-21)
+    age_days INTEGER,                            -- days since listed / seen (old snippets are likely gone)
+    confidence TEXT,                             -- high / normal / low (model has < 5 TL listings)
     effective_price_try REAL,                    -- price_try, else landed_cost_try
     group_n INTEGER, group_median REAL, outlier INTEGER,
     fair_price REAL, deal_pct REAL, deal_signal TEXT, pct_rank REAL,
@@ -94,9 +104,9 @@ CREATE VIEW listings_clean AS
     WHERE is_clone = 0 AND is_accessory = 0 AND wanted = 0 AND COALESCE(sold, 0) = 0
       AND model != 'Unknown';   -- neither catalogue nor classifier recognised it (books, toys...)
 CREATE VIEW priority_watchlist AS
-    SELECT priority, model, variant, condition, sold, price_try, price_usd, ships_to_tr, landed_cost_try,
+    SELECT priority, model, variant, condition, sold, price_try, price_usd, ships_to_tr, eta_days, landed_cost_try,
            effective_price_try, ROUND(fair_price) AS fair_price, ROUND(100 * deal_pct, 1) AS deal_percent,
-           deal_signal, source, title, url, seen
+           deal_signal, confidence, age_days, source, title, url, seen
     FROM listings_unified
     WHERE priority < 9 AND is_accessory = 0 AND wanted = 0;
 CREATE VIEW priority_deals AS
@@ -150,6 +160,22 @@ def canonical_url(url):
     return f"sahibinden:{m.group(1)}" if m else u
 
 
+def _age_days(seen):
+    """Days since the row was listed / seen (None if unknown)."""
+    if not seen:
+        return None
+    try:
+        d = datetime.fromisoformat(str(seen).replace("Z", "+00:00")[:25])
+    except ValueError:
+        try:
+            d = datetime.strptime(str(seen)[:10], "%Y-%m-%d")
+        except ValueError:
+            return None
+    if d.tzinfo is None:
+        d = d.replace(tzinfo=timezone.utc)
+    return max(0, (datetime.now(timezone.utc) - d).days)
+
+
 def priority_of(model, catalog_prio, ram_gb):
     if model == "Retroid Pocket 6" and ram_gb in (8, 12):
         return 1
@@ -176,8 +202,10 @@ def load_rows(db, fx, import_tax):
             # TL listings are domestic (1); USD-only stores from the SHIPPING table; unknown stays NULL
             ships = SHIPPING.get(domain) if usd and not price else (1 if price else None)
             source = canonical_source(source)
+            eta = ETA_DAYS.get(domain, 14) if usd and not price else 2
             rows.append({**p, "title": title, "price_try": price, "price_usd": usd,
-                         "ships_to_tr": ships, "landed_cost_try": landed,
+                         "ships_to_tr": ships, "landed_cost_try": landed, "eta_days": eta,
+                         "age_days": _age_days(seen),
                          "effective_price_try": price or landed,
                          "model": model, "brand": brand, "category": cat,
                          "category_source": "catalog" if cat else None, "catalog_priority": cprio,
@@ -233,6 +261,16 @@ def main():
 
     usable = lambda r: r["price_try"] and not r["is_accessory"] and not r["wanted"]
 
+    # Missing RAM/storage would look like "tiny" to the model (RP6 12GB/? priced at 9k).
+    # Fill the ML feature with the model's most common known value; *_known flags keep the truth.
+    for col in ("ram_gb", "storage_gb"):
+        modes = defaultdict(Counter)
+        for r in rows:
+            if r[col]:
+                modes[r["model"]][r[col]] += 1
+        for r in rows:
+            r[f"{col}_feat"] = r[col] or (modes[r["model"]].most_common(1)[0][0] if modes[r["model"]] else None)
+
     # --- algorithm: group statistics + IQR outliers per (model, variant, condition)
     groups = defaultdict(list)
     for r in rows:
@@ -286,11 +324,48 @@ def main():
             rs = [x for i, x in ratios.get((r["model"], r["condition"]), []) if i != id(r)]
             factor = (len(rs) * median(rs) + k) / (len(rs) + k) if rs else 1.0
             r["fair_price"] = f * factor if f else None
+
+    # Monotone within a model: more RAM (same storage) or more storage (same RAM) never lowers fair price.
+    def monotone(key_fn, axis):
+        groups_ = defaultdict(lambda: defaultdict(list))
+        for r in rows:
+            if r["fair_price"] and not r["is_clone"] and r[axis]:
+                groups_[key_fn(r)][r[axis]].append(r)
+        for by_level in groups_.values():
+            running = 0.0
+            for level in sorted(by_level):
+                rs_ = by_level[level]
+                mean = sum(x["fair_price"] for x in rs_) / len(rs_)
+                if mean < running:                       # violation: lift this level to the previous one
+                    for x in rs_:
+                        x["fair_price"] *= running / mean
+                    mean = running
+                running = mean
+    monotone(lambda r: (r["model"], r["condition"], r["storage_gb_feat"]), "ram_gb_feat")
+    monotone(lambda r: (r["model"], r["condition"], r["ram_gb_feat"]), "storage_gb_feat")
+
+    # Few listings for a model -> shrink toward the category median and flag low confidence.
+    n_model = Counter(r["model"] for r in train)
+    cat_med = defaultdict(list)
+    for r in train:
+        cat_med[(r["category"], r["condition"])].append(r["price_try"])
+        cat_med[(r["category"], None)].append(r["price_try"])
+    K_PRIOR, MIN_CONF = 3, 5
+    for r in rows:
+        n = n_model.get(r["model"], 0)
+        r["confidence"] = "high" if n >= 20 else "normal" if n >= MIN_CONF else "low"
+        if r["fair_price"] and not r["is_clone"] and n < MIN_CONF:
+            prior_list = cat_med.get((r["category"], r["condition"])) or cat_med.get((r["category"], None))
+            if prior_list:
+                prior = median(prior_list)
+                r["fair_price"] = (n * r["fair_price"] + K_PRIOR * prior) / (n + K_PRIOR)
         p = r["effective_price_try"]
         r["deal_pct"] = (r["fair_price"] - p) / r["fair_price"] if p and r["fair_price"] else None
         d = r["deal_pct"]
         r["deal_signal"] = (None if d is None else "good deal" if d >= err
                             else "overpriced" if d <= -err else "fair (within model error)")
+        if r["deal_signal"] and r["confidence"] == "low" and not r["is_clone"]:
+            r["deal_signal"] += f" (low confidence, n={n})"
         if r["fair_price"] is None and not r["is_clone"]:
             r["deal_signal"] = "no TR price data for this model"
         if r["ships_to_tr"] == 0:
@@ -307,12 +382,14 @@ def main():
                source, title, url
         FROM listings_clean
         WHERE price_try IS NOT NULL AND outlier = 0 AND group_n >= 3 AND COALESCE(ships_to_tr, 1) = 1
+          AND confidence != 'low' AND COALESCE(age_days, 0) <= 60
           AND deal_pct >= {max(0.10, err):.4f}      -- must beat the model's own error
         ORDER BY priority, deal_pct DESC;""")
     cols = ["priority", "model", "brand", "category", "category_source", "tier", "ram_gb", "storage_gb", "variant",
             "condition", "sold", "bundle", "is_accessory", "wanted", "is_clone", "title", "price_try", "price_usd",
             "ships_to_tr", "landed_cost_try", "effective_price_try", "group_n", "group_median", "outlier",
-            "fair_price", "deal_pct", "deal_signal", "pct_rank", "source_table", "source_kind", "source", "url", "seen"]
+            "fair_price", "deal_pct", "deal_signal", "pct_rank", "source_table", "source_kind", "source", "url", "seen",
+            "eta_days", "age_days", "confidence"]
     db.executemany(f"INSERT INTO listings_unified ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})",
                    [tuple(int(r[c]) if isinstance(r.get(c), bool) else r.get(c) for c in cols) for r in rows])
     now = datetime.now(timezone.utc).isoformat()

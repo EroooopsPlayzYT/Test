@@ -47,6 +47,10 @@ def variant(title):
     rom = (re.search(r"(?<![\d.])\d{1,2}\s*(?:gb)?\s*/\s*(\d{3,4})\b", t)
            or re.search(r"(?<![\d.])\d{1,2}\s*(?:gb)?\s*/\s*(\d)\s*tb", t)
            or _largest_gb(t) or re.search(r"(\d)\s*tb", t))
+    if not ram:   # "Anbernic RG557 12GB": a lone 2-24 GB figure with no other GB number is RAM
+        small = [int(x) for x in re.findall(r"(?<![\d.])(\d{1,2})\s*gb\b", t) if int(x) in (2, 3, 4, 6, 8, 12, 16, 24)]
+        if len(small) == 1 and not re.search(r"(\d{3,4})\s*gb|\d\s*tb", t):
+            ram = re.search(rf"(?<![\d.])({small[0]})\s*gb", t)
     ram_gb = int(ram.group(1)) if ram else None
     storage_gb = None
     if rom:

@@ -33,6 +33,26 @@ SELECT ?item ?itemLabel ?date ?mfrLabel ?cpuLabel ?ram ?storage ?price WHERE {
 """
 
 
+def clean(entries):
+    """Keep only real device models the catalogue recognises; drop companies (e.g. 'Anbernic') and
+    duplicates (keep the entry with the most filled fields per catalogue model)."""
+    import sys
+    sys.path.insert(0, str(OUT.parent.parent))
+    from analysis.catalog import classify
+    best = {}
+    for e in entries:
+        model, brand, _cat, _p = classify(e["name"])
+        if not model or e["name"].strip().lower() == (brand or "").lower():   # a company, not a device
+            continue
+        if not (e.get("release") or e.get("cpu") or e.get("ram")):           # nothing useful
+            continue
+        e["catalog_model"] = model
+        score = sum(bool(e.get(k)) for k in ("release", "manufacturer", "cpu", "ram", "launch_price"))
+        if model not in best or score > best[model][0]:
+            best[model] = (score, e)
+    return [e for _s, e in best.values()]
+
+
 def main():
     values = " ".join(f'"{n}"@en' for n in NAMES)
     url = "https://query.wikidata.org/sparql?" + urllib.parse.urlencode({"query": QUERY % values, "format": "json"})
@@ -57,7 +77,7 @@ def main():
         e["cpu"] = e["cpu"] or get("cpuLabel")
         e["ram"] = e["ram"] or get("ram")
         e["launch_price"] = e["launch_price"] or get("price")
-    OUT.write_text(json.dumps(list(out.values()), ensure_ascii=False, indent=1), encoding="utf-8")
+    OUT.write_text(json.dumps(clean(list(out.values())), ensure_ascii=False, indent=1), encoding="utf-8")
     for e in out.values():
         print(f"{e['name']:<32} {e['release'] or '':<11} {e['manufacturer'] or '':<22} {e['cpu'] or ''}")
     print(f"{len(out)} models -> {OUT}")

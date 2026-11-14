@@ -1,21 +1,13 @@
 [
  {
-  "name": "PlayStation Portable",
-  "release": "2004-12-12",
-  "manufacturer": "Sony Interactive Entertainment",
-  "cpu": "R4000",
-  "ram": "4",
-  "launch_price": "249.99",
-  "wikidata": "http://www.wikidata.org/entity/Q170325"
- },
- {
   "name": "PlayStation Vita",
   "release": "2011-12-17",
   "manufacturer": "Sony Interactive Entertainment",
   "cpu": "ARM Cortex-A9",
   "ram": "512",
   "launch_price": null,
-  "wikidata": "http://www.wikidata.org/entity/Q188808"
+  "wikidata": "http://www.wikidata.org/entity/Q188808",
+  "catalog_model": "PS Vita"
  },
  {
   "name": "Nintendo 3DS",
@@ -24,7 +16,8 @@
   "cpu": "Original Nintendo 3DS CPU",
   "ram": null,
   "launch_price": null,
-  "wikidata": "http://www.wikidata.org/entity/Q203597"
+  "wikidata": "http://www.wikidata.org/entity/Q203597",
+  "catalog_model": "Nintendo 3DS/2DS"
  },
  {
   "name": "Game Boy Advance SP",
@@ -33,16 +26,8 @@
   "cpu": null,
   "ram": null,
   "launch_price": null,
-  "wikidata": "http://www.wikidata.org/entity/Q842836"
- },
- {
-  "name": "Nintendo 2DS",
-  "release": "2013-10-12",
-  "manufacturer": "Nintendo",
-  "cpu": null,
-  "ram": null,
-  "launch_price": null,
-  "wikidata": "http://www.wikidata.org/entity/Q14743726"
+  "wikidata": "http://www.wikidata.org/entity/Q842836",
+  "catalog_model": "Retro clone"
  },
  {
   "name": "Nintendo Switch Lite",
@@ -51,16 +36,8 @@
   "cpu": "NVIDIA Tegra X1",
   "ram": null,
   "launch_price": "199.99",
-  "wikidata": "http://www.wikidata.org/entity/Q65458682"
- },
- {
-  "name": "Anbernic",
-  "release": null,
-  "manufacturer": null,
-  "cpu": null,
-  "ram": null,
-  "launch_price": null,
-  "wikidata": "http://www.wikidata.org/entity/Q97162281"
+  "wikidata": "http://www.wikidata.org/entity/Q65458682",
+  "catalog_model": "Nintendo Switch Lite"
  },
  {
   "name": "Miyoo Mini",
@@ -69,25 +46,8 @@
   "cpu": "SigmaStar SSD202D",
   "ram": "128",
   "launch_price": "60",
-  "wikidata": "http://www.wikidata.org/entity/Q114358017"
- },
- {
-  "name": "Ayaneo",
-  "release": null,
-  "manufacturer": null,
-  "cpu": null,
-  "ram": null,
-  "launch_price": null,
-  "wikidata": "http://www.wikidata.org/entity/Q115803816"
- },
- {
-  "name": "Lenovo Legion Go",
-  "release": null,
-  "manufacturer": "Lenovo",
-  "cpu": null,
-  "ram": null,
-  "launch_price": null,
-  "wikidata": "http://www.wikidata.org/entity/Q121722630"
+  "wikidata": "http://www.wikidata.org/entity/Q114358017",
+  "catalog_model": "Miyoo"
  },
  {
   "name": "Nintendo Switch",
@@ -96,33 +56,7 @@
   "cpu": null,
   "ram": null,
   "launch_price": null,
-  "wikidata": "http://www.wikidata.org/entity/Q123392577"
- },
- {
-  "name": "PlayStation Portable",
-  "release": "2009-07-10",
-  "manufacturer": null,
-  "cpu": null,
-  "ram": null,
-  "launch_price": null,
-  "wikidata": "http://www.wikidata.org/entity/Q126999940"
- },
- {
-  "name": "Nintendo Switch",
-  "release": null,
-  "manufacturer": null,
-  "cpu": null,
-  "ram": null,
-  "launch_price": null,
-  "wikidata": "http://www.wikidata.org/entity/Q133498131"
- },
- {
-  "name": "Anbernic",
-  "release": null,
-  "manufacturer": null,
-  "cpu": null,
-  "ram": null,
-  "launch_price": null,
-  "wikidata": "http://www.wikidata.org/entity/Q136352979"
+  "wikidata": "http://www.wikidata.org/entity/Q123392577",
+  "catalog_model": "Nintendo Switch"
  }
 ]
