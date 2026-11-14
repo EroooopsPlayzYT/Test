@@ -10,6 +10,7 @@ import os
 import re
 import sys
 import time
+import urllib.error
 import urllib.request
 
 LI_RE = re.compile(r"<li[^>]*>(<span><span class=\"pb_v8\">.*?)</li>", re.S)
@@ -68,18 +69,35 @@ def main(ids_path, out_path):
         pid = int(pid)
         if pid in done:
             continue
+        page, blocked = None, False
         for attempt in (1, 2):
             try:
                 req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept-Language": "tr-TR"})
                 page = urllib.request.urlopen(req, timeout=30).read().decode("utf-8", "replace")
                 break
-            except Exception as e:  # retry once, then record nothing for this id
+            except urllib.error.HTTPError as e:
                 print(f"{pid} attempt {attempt} failed: {e}")
-                page = None
+                if e.code in (403, 429):        # blocked / rate-limited: stop the run, don't hammer on
+                    blocked = True
+                    break
+                if e.code in (404, 410):        # product page gone: retrying can't help
+                    break
                 time.sleep(10)
-        offers = parse_offers(page, pid) if page else []
+            except Exception as e:              # timeout / network error: retry once
+                print(f"{pid} attempt {attempt} failed: {e}")
+                time.sleep(10)
+        if blocked:
+            print("blocked by the site; stopping. Re-run later: finished ids are skipped, this one is retried.")
+            return
+        if page is None:
+            # Temporary failure: write NOTHING, so the next run retries this id
+            # (a marker row here used to mark it "done" and lose its offers for good).
+            print(f"{pid}: failed, will retry on the next run")
+            continue
+        offers = parse_offers(page, pid)
         with open(out_path, "a", encoding="utf-8") as f:
-            for o in offers or [{"akakce_id": pid, "seller": None}]:  # marker row so re-runs skip it
+            # marker row only for a page that loaded fine but really has no offers
+            for o in offers or [{"akakce_id": pid, "seller": None}]:
                 f.write(json.dumps(o, ensure_ascii=False) + "\n")
         print(f"{pid}: {len(offers)} offers")
         time.sleep(2)

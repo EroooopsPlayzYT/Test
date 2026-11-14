@@ -1,1 +1,3 @@
 __pycache__/
+# text export is sent to the user directly; committing 5 MB on every rebuild bloated .git
+handhelds_db.txt

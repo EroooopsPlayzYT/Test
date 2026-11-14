@@ -10,12 +10,11 @@
 import math
 
 import numpy as np
-from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression, Ridge
 from sklearn.model_selection import KFold, cross_val_predict
-from sklearn.pipeline import Pipeline, make_pipeline
+from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import OneHotEncoder
 
 CAT_FEATURES = ["model", "category", "brand", "condition", "source_kind", "bundle"]

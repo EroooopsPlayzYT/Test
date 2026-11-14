@@ -34,6 +34,7 @@ FX_CACHE = Path("data/fx_usd_try.json")
 SHIPPING = {"goretroid.com": 0, "ayntec.com": None, "anbernic.com": None, "aliexpress.com": None,
             "ebay.com": None, "amazon.com": None}
 # Second-hand marketplaces / forums: rows from them default to "used" when the title says nothing.
+MIN_TRAIN = 20   # below this, cross-validated ML is meaningless (and KFold would crash)
 USED_SITES = ("donanimhaber", "technopat", "letgo", "sahibinden", "dolap", "gardrops")
 
 SOURCES = [  # (source_table, source_kind, SQL -> title, price_try, price_usd, condition_hint, source, url, seen)
@@ -53,8 +54,12 @@ SOURCES = [  # (source_table, source_kind, SQL -> title, price_try, price_usd, c
      "SELECT title, price_try, price_usd, condition, source, url, seen FROM manual_listings"),
     ("scraper_observations", "scraper",
      "SELECT title, price_try, NULL, COALESCE(condition, '') || CASE WHEN in_stock = 0 THEN ' sold' ELSE '' END, "
-     "source || COALESCE('/' || seller, ''), url, scraped_at FROM scraper_observations "
-     "WHERE source NOT IN ('donanimhaber')"),   # forum rows already come via used_listings
+     "source || COALESCE('/' || seller, ''), url, scraped_at FROM scraper_observations o "
+     "WHERE source NOT IN ('donanimhaber') "   # forum rows already come via used_listings
+     # observations are append-only history: use only the latest per (source, product, seller),
+     # otherwise an old price and a new price for the same offer both count
+     "AND scraped_at = (SELECT MAX(scraped_at) FROM scraper_observations l WHERE l.source = o.source "
+     "AND l.product_id = o.product_id AND l.seller IS o.seller)"),
     ("handhelds", "aggregator",                   # Akakce cheapest price: only for products without offer rows
      "SELECT title, min_price_try, NULL, 'new', 'akakce', url, scraped_on FROM handhelds "
      "WHERE akakce_id NOT IN (SELECT DISTINCT akakce_id FROM offers)"),
@@ -247,32 +252,40 @@ def main():
     train = [r for r in rows if usable(r) and not r["outlier"] and not r["is_clone"]]
     metrics = {"usd_try": {"rate": fx, "source": fx_src}, "import_tax_assumed": args.import_tax,
                "title_classifier": clf_metrics}
-    model, m = train_price_model(train)
-    metrics.update(m)
-    err = min(m["cv_median_abs_pct_error"].values())
-    ml_fair = predict_fair(model, rows)
-    # out-of-fold for rows the model trained on, so a listing is never priced by a model that saw it
-    train_ids = {id(r): i for i, r in enumerate(train)}
-    oof = out_of_fold(m["chosen"], train)
-    ml_fair = [oof[train_ids[id(r)]] if id(r) in train_ids else f for r, f in zip(rows, ml_fair)]
+    if len(train) >= MIN_TRAIN:
+        model, m = train_price_model(train)
+        metrics.update(m)
+        err = min(m["cv_median_abs_pct_error"].values())
+        ml_fair = predict_fair(model, rows)
+        # out-of-fold for rows the model trained on, so a listing is never priced by a model that saw it
+        train_ids = {id(r): i for i, r in enumerate(train)}
+        oof = out_of_fold(m["chosen"], train)
+        ml_fair = [oof[train_ids[id(r)]] if id(r) in train_ids else f for r, f in zip(rows, ml_fair)]
+    else:
+        # too little data for cross-validation (fresh or filtered db): fall back to group medians
+        print(f"only {len(train)} training rows (< {MIN_TRAIN}); using group medians instead of ML")
+        metrics.update({"chosen": "group_median_fallback", "cv_median_abs_pct_error": {}, "n_train": len(train)})
+        err = 0.20
+        ml_fair = [r["group_median"] or 0 for r in rows]
+        ml_fair = [f if f else None for f in ml_fair]
 
     # calibrate to each model's observed level (empirical Bayes, k=3), leave-one-out so a row's own
     # price never pulls its own fair price; keeps ML variant ordering (8GB < 12GB)
     ratios = defaultdict(list)
     for r, f in zip(rows, ml_fair):
-        if usable(r) and not r["outlier"] and not r["is_clone"]:
+        if f and usable(r) and not r["outlier"] and not r["is_clone"]:
             ratios[(r["model"], r["condition"])].append((id(r), r["price_try"] / f))
     has_try_data = {m_ for (m_, _c) in ratios}
     k = 3
     for r, f in zip(rows, ml_fair):
         if r["is_clone"]:
             r["fair_price"] = r["group_median"]   # clones: plain median of comparable clones
-        elif r["model"] not in has_try_data or (r["model"], r["condition"]) not in ratios and r["condition"] == "new":
+        elif r["model"] not in has_try_data or ((r["model"], r["condition"]) not in ratios and r["condition"] == "new"):
             r["fair_price"] = None                # no TL prices for this model (or for it new): don't guess
         else:
             rs = [x for i, x in ratios.get((r["model"], r["condition"]), []) if i != id(r)]
             factor = (len(rs) * median(rs) + k) / (len(rs) + k) if rs else 1.0
-            r["fair_price"] = f * factor
+            r["fair_price"] = f * factor if f else None
         p = r["effective_price_try"]
         r["deal_pct"] = (r["fair_price"] - p) / r["fair_price"] if p and r["fair_price"] else None
         d = r["deal_pct"]
@@ -308,7 +321,7 @@ def main():
 
     n_clean = db.execute("SELECT count(*) FROM listings_clean").fetchone()[0]
     print(f"listings_unified: {len(rows)} rows ({n_clean} clean), price model trained on {len(train)}")
-    print("price model:", json.dumps({"chosen": metrics["chosen"], "cv_err": metrics["cv_median_abs_pct_error"]}))
+    print("price model:", json.dumps({"chosen": metrics.get("chosen"), "cv_err": metrics.get("cv_median_abs_pct_error")}))
     if clf_metrics:
         print(f"classifier: accuracy {clf_metrics['accuracy']}, balanced {clf_metrics['balanced_accuracy']}")
     print(f"USD->TRY {fx} ({fx_src}), import tax assumed {args.import_tax:.0%}")

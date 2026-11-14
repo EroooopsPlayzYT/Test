@@ -3,7 +3,7 @@
 // Trendyol's robots.txt disallows /sr, so instead of Trendyol.link() the wrapper hands
 // parser() the allowed category/brand pages. From cloud servers Trendyol answers 403.
 import { execFile } from "node:child_process";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,8 +26,13 @@ export const trendyolPy: Adapter = {
     let lastErr: { url: string; error: string } | null = null;
     for (const path of TRENDYOL_LISTINGS) {
       const workdir = mkdtempSync(join(tmpdir(), "trendyol-"));
-      const { stdout } = await run("python3", [WRAPPER, query, String(limit), workdir, `https://www.trendyol.com${path}`],
-                                   { maxBuffer: 64 * 1024 * 1024, timeout: 30 * 60 * 1000 });
+      let stdout: string;
+      try {
+        ({ stdout } = await run("python3", [WRAPPER, query, String(limit), workdir, `https://www.trendyol.com${path}`],
+                                { maxBuffer: 64 * 1024 * 1024, timeout: 30 * 60 * 1000 }));
+      } finally {
+        rmSync(workdir, { recursive: true, force: true });   // trendyol.py's resultstrendyol.json scratch dir
+      }
       const out = JSON.parse(stdout.trim().split("\n").pop()!) as { url: string; error: string | null; products: Card[] };
       if (out.error && !out.products.length) lastErr = { url: out.url, error: out.error };
       for (const c of out.products) {

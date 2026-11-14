@@ -54,11 +54,16 @@ export function saveProducts(db: DatabaseSync, rows: Product[], query: string): 
     (source, product_id, title, price_try, in_stock, seller, condition, url, query, scraped_at)
     VALUES (?,?,?,?,?,?,?,?,?,?)`);
   db.exec("BEGIN");
-  for (const r of rows) {
-    ins.run(r.source, r.id, r.title, r.priceTry, r.inStock == null ? null : Number(r.inStock),
-            r.seller ?? null, r.condition ?? null, r.url, query, r.scrapedAt);
+  try {
+    for (const r of rows) {
+      ins.run(r.source, r.id, r.title, r.priceTry, r.inStock == null ? null : Number(r.inStock),
+              r.seller ?? null, r.condition ?? null, r.url, query, r.scrapedAt);
+    }
+    db.exec("COMMIT");
+  } catch (e) {
+    db.exec("ROLLBACK");   // never leave a transaction open for the next save
+    throw e;
   }
-  db.exec("COMMIT");
 }
 
 export function logRun(db: DatabaseSync, source: string, query: string, status: string,

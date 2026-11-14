@@ -17,7 +17,7 @@
 import * as cheerio from "cheerio";
 import { createRequire } from "node:module";
 import { writeFileSync } from "node:fs";
-import { BlockedError, RobotsDisallowedError, fetchText, isAllowed, parseRobots, pool, pickUserAgent } from "../http.js";
+import { BlockedError, RobotsDisallowedError, fetchText, pool, pickUserAgent, politeWait, robotsAllows } from "../http.js";
 import { productsFromJsonLd } from "../jsonld.js";
 import { parsePrice } from "../types.js";
 import { parseTrendyolSearch } from "../adapters/trendyol.js";
@@ -26,6 +26,8 @@ import { TRENDYOL_LISTINGS } from "../adapters/trendyol-browse.js";
 export const BASE = "https://www.trendyol.com";
 export const PER_PAGE = 24;        // trendyol.py: "Results per page was 24"
 export const MAX_PAGES = 208;      // ProductScrape README: "Trendyol can load up to 208 pages"
+export const MAX_FILTERED_PAGES = 15;   // a filtered query walks at most this many pages per listing
+export const MAX_EMPTY_PAGES = 5;       // ...and gives up after this many pages in a row with no match
 export const NOT_AVAILABLE = "Not available, please view the product page";
 
 export const SEL = {
@@ -57,7 +59,8 @@ export interface PriceCheck {
 
 export interface Fetcher {
   /** Returns page HTML. `expandSellers` clicks the other-sellers button first (browser only). */
-  get(url: string, opts?: { expandSellers?: boolean; reload?: boolean }): Promise<string>;
+  /** keepTab: leave the tab open for later reloads (tracking). Search closes tabs after reading. */
+  get(url: string, opts?: { expandSellers?: boolean; reload?: boolean; keepTab?: boolean }): Promise<string>;
   close(): Promise<void>;
 }
 
@@ -76,35 +79,37 @@ export async function browserFetcher(): Promise<Fetcher> {
   try { pw = await import(mod); } catch { pw = req(mod); }
   const browser = await pw.chromium.launch();
   const context = await browser.newContext({ userAgent: pickUserAgent(), locale: "tr-TR" });
-  const pages = new Map<string, any>();   // one tab per URL, reused like OmBayus' configureBrowser()
-  let rules: ReturnType<typeof parseRobots> | null = null;
+  const pages = new Map<string, any>();   // tracked URLs keep their tab, like OmBayus' configureBrowser()
   return {
     async get(url, opts = {}) {
-      if (!rules) rules = parseRobots(await fetchText(`${BASE}/robots.txt`, { skipRobots: true }).catch(() => ""));
-      const u = new URL(url);
-      if (!isAllowed(rules, u.pathname + u.search)) throw new RobotsDisallowedError(url);
+      if (!(await robotsAllows(url))) throw new RobotsDisallowedError(url);
+      await politeWait(url, 2500);          // same per-host slots as plain HTTP requests
       let page = pages.get(url);
       let res;
       if (!page) {
         page = await context.newPage();
-        pages.set(url, page);
+        if (opts.keepTab) pages.set(url, page);
         res = await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 });
       } else if (opts.reload !== false) {
         res = await page.reload({ waitUntil: "domcontentloaded", timeout: 45000 });   // OmBayus: page.reload()
       }
-      await page.waitForTimeout(2000);
-      const status = res?.status() ?? 200;
-      const title = await page.title();
-      if (status === 403 || status === 429 || BLOCK_TITLE.test(title)) {
-        throw new BlockedError(url, status, `browser: ${title || "HTTP " + status}`);
+      try {
+        await page.waitForTimeout(2000);
+        const status = res?.status() ?? 200;
+        const title = await page.title();
+        if (status === 403 || status === 429 || BLOCK_TITLE.test(title)) {
+          throw new BlockedError(url, status, `browser: ${title || "HTTP " + status}`);
+        }
+        if (opts.expandSellers) {
+          // OmBayus: document.querySelector('.omc-mr-btn').click()
+          await page.evaluate((sel: string) => (document.querySelector(sel) as HTMLElement | null)?.click(),
+                              SEL.otherSellersButton);
+          await page.waitForTimeout(1500);
+        }
+        return await page.evaluate(() => document.documentElement.outerHTML);
+      } finally {
+        if (!opts.keepTab) await page.close();   // search mode: don't leave hundreds of tabs open
       }
-      if (opts.expandSellers) {
-        // OmBayus: document.querySelector('.omc-mr-btn').click()
-        await page.evaluate((sel: string) => (document.querySelector(sel) as HTMLElement | null)?.click(),
-                            SEL.otherSellersButton);
-        await page.waitForTimeout(1500);
-      }
-      return page.evaluate(() => document.documentElement.outerHTML);
     },
     async close() { await browser.close(); },
   };
@@ -190,18 +195,22 @@ export async function searchHybrid(query: string, limit: number, opts: SearchOpt
   const cards: (Card & { priceTry: number | null })[] = [];
   for (const path of listings) {
     // Walk pages until enough matching cards; for an unfiltered query, use trendyol.py's exact plan.
-    const plan = words.length ? Array.from({ length: MAX_PAGES }, (_, i) => ({ page: i + 1, take: null }))
+    // (was up to 208 pages per listing, ~1,250 requests for a rare model; now capped)
+    const plan = words.length ? Array.from({ length: MAX_FILTERED_PAGES }, (_, i) => ({ page: i + 1, take: null }))
                               : pagePlan(limit - cards.length);
+    let emptyStreak = 0;
     for (const { page, take } of plan) {
-      if (cards.length >= limit) break;
+      if (cards.length >= limit || emptyStreak >= MAX_EMPTY_PAGES) break;
       let got = parseListing(await fetcher.get(listingPageUrl(path, page)));
       if (!got.length) break;
       if (take != null) got = got.slice(0, take);
+      const before = cards.length;
       for (const c of got) {
         if (cards.some((x) => x.link === c.link)) continue;
         if (words.length && !words.every((w) => c.title.toLowerCase().includes(w))) continue;
         cards.push(c);
       }
+      emptyStreak = cards.length === before ? emptyStreak + 1 : 0;
     }
     if (cards.length >= limit) break;
   }
@@ -238,7 +247,7 @@ export interface TrackOptions {
 }
 
 export async function checkPrice(fetcher: Fetcher, url: string): Promise<PriceCheck> {
-  const html = await fetcher.get(url, { expandSellers: true, reload: true });
+  const html = await fetcher.get(url, { expandSellers: true, reload: true, keepTab: true });
   const p = parseProductPage(html, url);
   return { url, title: p.title, yourPrice: p.yourPrice, sellerPrices: p.sellerPrices, cheapest: p.cheapest,
            cheaperSellerExists: p.cheaperSellerExists, checkedAt: new Date().toISOString() };

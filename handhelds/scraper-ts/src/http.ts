@@ -41,17 +41,34 @@ export class RobotsDisallowedError extends Error {
 }
 
 type Rule = { allow: boolean; path: string };
-const robotsCache = new Map<string, Promise<Rule[]>>();
+type Robots = { rules: Rule[]; crawlDelayMs: number };
+const robotsCache = new Map<string, Promise<Robots>>();
 const lastHit = new Map<string, number>();
 /** Circuit breaker: once a host blocks us, skip it for the rest of the run. */
 const blockedHosts = new Map<string, BlockedError>();
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** Tunables (tests shrink the backoff so they run fast). */
+export const httpConfig = { backoffMs: 5000 };
 
 export interface FetchOptions {
   delayMs?: number;      // minimum gap between requests to the same host
   retries?: number;      // for timeouts / 5xx only
   timeoutMs?: number;
   skipRobots?: boolean;  // only for fetching robots.txt itself
+  robotsProbe?: boolean; // internal: a 4xx on robots.txt means "no file"
+}
+
+/** robots.txt verdict for a URL (used by the headless-browser fetcher). */
+export async function robotsAllows(url: string): Promise<boolean> {
+  const u = new URL(url);
+  return isAllowed((await robotsFor(u.origin)).rules, u.pathname + u.search);
+}
+
+/** Waits for a polite slot for `url`'s host (used by the headless-browser fetcher too). */
+export async function politeWait(url: string, delayMs = 1500): Promise<void> {
+  const u = new URL(url);
+  const robots = await robotsFor(u.origin);
+  await waitForSlot(u.host, Math.max(delayMs, robots.crawlDelayMs));
 }
 
 function blockReason(status: number, headers: Headers, body: string): string | null {
@@ -65,18 +82,51 @@ function blockReason(status: number, headers: Headers, body: string): string | n
   return null;
 }
 
-async function robotsRules(origin: string): Promise<Rule[]> {
+/** Thrown when robots.txt is a plain 4xx (no file): treated as "no rules", like Google does. */
+class NoRobotsFile extends Error {}
+
+/**
+ * robots.txt for an origin. 4xx (no file) -> allow everything. 5xx, timeouts, network errors
+ * -> disallow everything for this run ("fail closed"), so a flaky robots.txt never turns into
+ * "crawl it all".
+ */
+async function robotsFor(origin: string): Promise<Robots> {
   if (!robotsCache.has(origin)) {
     robotsCache.set(origin, (async () => {
       try {
-        const txt = await fetchText(`${origin}/robots.txt`, { skipRobots: true, retries: 0 });
-        return parseRobots(txt);
-      } catch {
-        return []; // no readable robots.txt -> no rules
+        const txt = await fetchText(`${origin}/robots.txt`, { skipRobots: true, retries: 1, robotsProbe: true });
+        return { rules: parseRobots(txt), crawlDelayMs: parseCrawlDelay(txt) };
+      } catch (e) {
+        if (e instanceof NoRobotsFile) return { rules: [], crawlDelayMs: 0 };
+        if (e instanceof BlockedError) throw e;
+        return { rules: [{ allow: false, path: "/" }], crawlDelayMs: 0 };
       }
     })());
   }
   return robotsCache.get(origin)!;
+}
+
+/** Crawl-delay for User-agent: * in milliseconds (0 if none). */
+export function parseCrawlDelay(txt: string): number {
+  let applies = false;
+  let lastWasAgent = false;
+  for (const raw of txt.split(/\r?\n/)) {
+    const m = raw.replace(/#.*/, "").trim().match(/^([A-Za-z-]+)\s*:\s*(.*)$/);
+    if (!m) continue;
+    const k = m[1].toLowerCase();
+    if (k === "user-agent") {
+      if (!lastWasAgent) applies = false;
+      if (m[2].trim() === "*") applies = true;
+      lastWasAgent = true;
+      continue;
+    }
+    lastWasAgent = false;
+    if (applies && k === "crawl-delay") {
+      const s = Number(m[2]);
+      if (Number.isFinite(s) && s > 0) return Math.min(s, 60) * 1000;
+    }
+  }
+  return 0;
 }
 
 /** Rules that apply to User-agent: * (longest match wins, Allow wins ties). */
@@ -120,24 +170,65 @@ export function isAllowed(rules: Rule[], pathAndQuery: string): boolean {
   return best ? best.allow : true;
 }
 
-export async function fetchText(url: string, opts: FetchOptions = {}): Promise<string> {
-  const { delayMs = 1500, retries = 2, timeoutMs = 30000, skipRobots = false } = opts;
-  const u = new URL(url);
-  const tripped = blockedHosts.get(u.host);
-  if (tripped) throw new BlockedError(url, tripped.status, `host already blocked this run (${tripped.reason})`);
-  if (!skipRobots && !isAllowed(await robotsRules(u.origin), u.pathname + u.search)) {
-    throw new RobotsDisallowedError(url);
+/** A non-retryable HTTP status (404, 410, 400…): retrying cannot help. */
+export class HttpStatusError extends Error {
+  constructor(public url: string, public status: number) {
+    super(`HTTP ${status} at ${url}`);
   }
+}
+
+/**
+ * Reserve the next request slot for a host BEFORE sleeping, so concurrent callers queue up
+ * one delay apart instead of all reading the same "last hit" and firing together.
+ */
+async function waitForSlot(host: string, delayMs: number): Promise<void> {
+  const at = Math.max(Date.now(), (lastHit.get(host) ?? 0) + delayMs);
+  lastHit.set(host, at);
+  const wait = at - Date.now();
+  if (wait > 0) await sleep(wait);
+}
+
+const MAX_REDIRECTS = 5;
+
+export async function fetchText(url: string, opts: FetchOptions = {}): Promise<string> {
+  const { delayMs = 1500, retries = 2, timeoutMs = 30000, skipRobots = false, robotsProbe = false } = opts;
+  let current = url;
+  for (let hop = 0; ; hop++) {
+    const u = new URL(current);
+    const tripped = blockedHosts.get(u.host);
+    if (tripped) throw new BlockedError(current, tripped.status, `host already blocked this run (${tripped.reason})`);
+    let delay = delayMs;
+    if (!skipRobots) {
+      const robots = await robotsFor(u.origin);
+      if (!isAllowed(robots.rules, u.pathname + u.search)) throw new RobotsDisallowedError(current);
+      delay = Math.max(delayMs, robots.crawlDelayMs);   // honour Crawl-delay if it is longer
+    }
+    const res = await fetchOnce(current, { delay, retries, timeoutMs, robotsProbe });
+    if (res.redirectTo) {
+      // follow redirects ourselves so every hop is checked against ITS host's robots.txt
+      if (hop >= MAX_REDIRECTS) throw new Error(`too many redirects from ${url}`);
+      current = new URL(res.redirectTo, current).href;
+      continue;
+    }
+    return res.body!;
+  }
+}
+
+async function fetchOnce(url: string, o: { delay: number; retries: number; timeoutMs: number; robotsProbe: boolean }):
+    Promise<{ body?: string; redirectTo?: string }> {
+  const u = new URL(url);
   for (let attempt = 0; ; attempt++) {
-    const wait = (lastHit.get(u.host) ?? 0) + delayMs - Date.now();
-    if (wait > 0) await sleep(wait);
-    lastHit.set(u.host, Date.now());
+    await waitForSlot(u.host, o.delay);
     try {
       const res = await fetch(url, {
         headers: { "User-Agent": pickUserAgent(), "Accept-Language": "tr-TR,tr;q=0.9" },
-        signal: AbortSignal.timeout(timeoutMs),
-        redirect: "follow",
+        signal: AbortSignal.timeout(o.timeoutMs),
+        redirect: "manual",
       });
+      if (res.status >= 300 && res.status < 400 && res.headers.get("location")) {
+        await res.body?.cancel();
+        return { redirectTo: res.headers.get("location")! };
+      }
       const body = await res.text();
       const reason = blockReason(res.status, res.headers, body);
       if (reason) {
@@ -145,12 +236,14 @@ export async function fetchText(url: string, opts: FetchOptions = {}): Promise<s
         blockedHosts.set(u.host, err);
         throw err;
       }
-      if (res.status >= 500 && attempt < retries) { await sleep(5000 * (attempt + 1)); continue; }
-      if (!res.ok) throw new Error(`HTTP ${res.status} at ${url}`);
-      return body;
+      if (res.ok) return { body };
+      if (o.robotsProbe && res.status >= 400 && res.status < 500) throw new NoRobotsFile();
+      if (res.status >= 500) throw new Error(`HTTP ${res.status} at ${url}`);   // transient: retried below
+      throw new HttpStatusError(url, res.status);                                 // 404/410/…: never retried
     } catch (e) {
-      if (e instanceof BlockedError || attempt >= retries) throw e;
-      await sleep(5000 * (attempt + 1)); // timeout / network error
+      if (e instanceof BlockedError || e instanceof HttpStatusError || e instanceof NoRobotsFile) throw e;
+      if (attempt >= o.retries) throw e;
+      await sleep(httpConfig.backoffMs * (attempt + 1));   // 5xx, timeout or network error
     }
   }
 }
