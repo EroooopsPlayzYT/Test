@@ -1,5 +1,6 @@
 // Akakce: search results -> product pages -> one Product per seller offer (all shops, big and small).
 import * as cheerio from "cheerio";
+import { cacheConfig } from "../cache.js";
 import { BlockedError, fetchText, pool } from "../http.js";
 import { productsFromJsonLd } from "../jsonld.js";
 import { Adapter, Product, parsePrice } from "../types.js";
@@ -36,7 +37,7 @@ export const akakce: Adapter = {
     const now = new Date().toISOString();
     const perProduct = await pool(cards.slice(0, limit), 1, async (c) => {
       try {
-        const ld = productsFromJsonLd(await fetchText(c.url, { delayMs: 4000 }))[0];
+        const ld = productsFromJsonLd(await fetchText(c.url, { delayMs: 4000, maxAgeMs: cacheConfig.itemMaxAgeMs }))[0];
         if (ld?.offers.length) {
           return ld.offers.map((o): Product => ({
             source: "akakce", id: c.id, title: c.title, priceTry: o.price, inStock: true,

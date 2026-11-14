@@ -1,6 +1,6 @@
 # ADR-0001: Keep TypeScript + Python; speed up scraping with incremental fetching, not a Rust/assembly port
 
-**Status:** Proposed
+**Status:** Accepted (incremental mode implemented 2026-11-14)
 **Date:** 2026-11-14
 **Deciders:** project owner
 
@@ -114,10 +114,19 @@ a rewrite).
 
 ## Action Items
 
-1. [ ] Add a `seen` table (url, etag, last_modified, content_hash, last_checked, status).
-2. [ ] `http.ts`: send `If-None-Match` / `If-Modified-Since`; treat 304 as "unchanged".
-3. [ ] Adapters: skip forum threads / Akakçe products checked within N hours unless `--refresh`.
-4. [ ] Prefer sitemaps or category pages over search pages where robots.txt allows.
-5. [ ] Benchmark: full run vs incremental run; record requests and wall time here.
+1. [x] Page cache with validators (`scraper-ts/src/cache.ts`: body + ETag/Last-Modified + last check, per URL).
+2. [x] `http.ts`: sends `If-None-Match` / `If-Modified-Since`; 304 reuses the cached body.
+3. [x] Item pages (Akakçe products, forum threads, idefix/Amazon products) are skipped if checked within
+       `--recheck-hours` (default 24); `--refresh` forces a re-check. Scrapy side: RFC2616 cache + SkipRecentlySeen.
+4. [x] Sitemaps (Scrapy shop spider) and category/brand pages (idefix, Trendyol) used where robots.txt allows.
+5. [x] Benchmark (DonanımHaber, 2 section pages + threads, same run twice):
+
+   | Run | Requests | Wall time |
+   |---|---|---|
+   | full | 27 | 66 s |
+   | incremental | 3 (24 served from cache) | 7 s |
+
+   ~9× faster, 89 % fewer requests. DonanımHaber and idefix send no ETag/Last-Modified, so their
+   listing pages are re-downloaded; the saving comes from skipping fresh item pages.
 6. [ ] Optional learning track: port `parseRobots` + `isAllowed` to Rust as a standalone crate
        (not on the critical path).

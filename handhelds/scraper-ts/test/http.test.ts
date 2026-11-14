@@ -4,6 +4,12 @@ import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
 import { AddressInfo } from "node:net";
 import { fetchText, httpConfig, parseCrawlDelay, HttpStatusError, RobotsDisallowedError } from "../src/http.js";
+import { cacheConfig, stats } from "../src/cache.js";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+cacheConfig.dir = mkdtempSync(join(tmpdir(), "httpcache-test-"));
 
 httpConfig.backoffMs = 20;
 const hits: Record<string, number[]> = {};
@@ -23,6 +29,11 @@ before(async () => {
       const n = hits[path].length;
       if (n < 2) { res.writeHead(503); return res.end("busy"); }
       res.writeHead(200); return res.end("ok after retry");
+    }
+    if (path === "/etag") {
+      if (req.headers["if-none-match"] === '"v1"') { res.writeHead(304); return res.end(); }
+      res.writeHead(200, { etag: '"v1"', "content-type": "text/html" });
+      return res.end("<html>versioned</html>");
     }
     if (path === "/to-private") { res.writeHead(302, { location: "/private/secret" }); return res.end(); }
     res.writeHead(200, { "content-type": "text/html" });
@@ -66,4 +77,24 @@ test("unreachable robots.txt fails closed", async () => {
 test("crawl-delay parsing", () => {
   assert.equal(parseCrawlDelay("User-agent: *\nCrawl-delay: 2\n"), 2000);
   assert.equal(parseCrawlDelay("User-agent: Googlebot\nCrawl-delay: 9\n\nUser-agent: *\nDisallow: /x\n"), 0);
+});
+
+test("incremental: ETag revalidation returns 304 and reuses the cached body", async () => {
+  const first = await fetchText(`${base}/etag`, { delayMs: 0 });
+  const before = { ...stats };
+  const second = await fetchText(`${base}/etag`, { delayMs: 0 });
+  assert.equal(second, first);
+  assert.equal(stats.notModified - before.notModified, 1);
+  assert.equal(stats.downloaded - before.downloaded, 0);
+});
+
+test("incremental: a fresh page is served without any request", async () => {
+  await fetchText(`${base}/item42`, { delayMs: 0 });
+  const n = hits["/item42"].length;
+  await fetchText(`${base}/item42`, { delayMs: 0, maxAgeMs: 60_000 });
+  assert.equal(hits["/item42"].length, n);            // no new request
+  cacheConfig.refresh = true;                          // --refresh forces a re-check
+  await fetchText(`${base}/item42`, { delayMs: 0, maxAgeMs: 60_000 });
+  cacheConfig.refresh = false;
+  assert.equal(hits["/item42"].length, n + 1);
 });

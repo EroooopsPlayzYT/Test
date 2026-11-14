@@ -1,6 +1,7 @@
 // idefix: the one big store that answers plain requests. Its search is rendered by
 // JavaScript and its category pages are disallowed in robots.txt, so we read brand
 // pages (server-rendered, ~24 products each) and the allowed product pages.
+import { cacheConfig } from "../cache.js";
 import { fetchText, pool } from "../http.js";
 import { productsFromJsonLd } from "../jsonld.js";
 import { Adapter, Product } from "../types.js";
@@ -34,7 +35,7 @@ export const idefix: Adapter = {
     const now = new Date().toISOString();
     const rows = await pool([...links].slice(0, limit), 1, async (url): Promise<Product | null> => {
       try {
-        const p = productsFromJsonLd(await fetchText(url))[0];
+        const p = productsFromJsonLd(await fetchText(url, { maxAgeMs: cacheConfig.itemMaxAgeMs }))[0];
         if (!p) return null;
         return { source: "idefix", id: url.match(/-p-(\d+)/)![1], title: p.name, priceTry: p.price,
                  inStock: p.inStock, url, seller: p.offers[0]?.seller ?? null, condition: "new", scrapedAt: now };

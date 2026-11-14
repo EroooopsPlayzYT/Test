@@ -2,6 +2,7 @@
 // disabled SSL checks with: one honest UA, TLS on, robots.txt checks, a delay
 // per host, retries only for transient errors, and a hard stop on bot blocks.
 import { EnvHttpProxyAgent, setGlobalDispatcher } from "undici";
+import { conditionalHeaders, isFresh, readCache, stats, writeCache } from "./cache.js";
 
 if (process.env.HTTPS_PROXY || process.env.HTTP_PROXY) {
   setGlobalDispatcher(new EnvHttpProxyAgent()); // Node's fetch ignores *_PROXY on its own
@@ -56,6 +57,7 @@ export interface FetchOptions {
   timeoutMs?: number;
   skipRobots?: boolean;  // only for fetching robots.txt itself
   robotsProbe?: boolean; // internal: a 4xx on robots.txt means "no file"
+  maxAgeMs?: number;     // incremental mode: serve from cache without any request if checked this recently
 }
 
 /** robots.txt verdict for a URL (used by the headless-browser fetcher). */
@@ -191,7 +193,12 @@ async function waitForSlot(host: string, delayMs: number): Promise<void> {
 const MAX_REDIRECTS = 5;
 
 export async function fetchText(url: string, opts: FetchOptions = {}): Promise<string> {
-  const { delayMs = 1500, retries = 2, timeoutMs = 30000, skipRobots = false, robotsProbe = false } = opts;
+  const { delayMs = 1500, retries = 2, timeoutMs = 30000, skipRobots = false, robotsProbe = false, maxAgeMs = 0 } = opts;
+  const cached = robotsProbe ? null : readCache(url);
+  if (cached && isFresh(cached.entry, maxAgeMs)) {
+    stats.servedFresh++;
+    return cached.body;                       // checked recently: no request at all
+  }
   let current = url;
   for (let hop = 0; ; hop++) {
     const u = new URL(current);
@@ -203,28 +210,42 @@ export async function fetchText(url: string, opts: FetchOptions = {}): Promise<s
       if (!isAllowed(robots.rules, u.pathname + u.search)) throw new RobotsDisallowedError(current);
       delay = Math.max(delayMs, robots.crawlDelayMs);   // honour Crawl-delay if it is longer
     }
-    const res = await fetchOnce(current, { delay, retries, timeoutMs, robotsProbe });
+    const res = await fetchOnce(current, { delay, retries, timeoutMs, robotsProbe,
+                                          validators: current === url ? cached?.entry : undefined });
     if (res.redirectTo) {
       // follow redirects ourselves so every hop is checked against ITS host's robots.txt
       if (hop >= MAX_REDIRECTS) throw new Error(`too many redirects from ${url}`);
       current = new URL(res.redirectTo, current).href;
       continue;
     }
+    if (res.notModified && cached) {
+      writeCache(url, cached.body, null, cached.entry);   // still valid: bump checkedAt, keep body
+      return cached.body;
+    }
+    if (!robotsProbe) writeCache(url, res.body!, res.headers ?? null);
     return res.body!;
   }
 }
 
-async function fetchOnce(url: string, o: { delay: number; retries: number; timeoutMs: number; robotsProbe: boolean }):
-    Promise<{ body?: string; redirectTo?: string }> {
+async function fetchOnce(url: string, o: { delay: number; retries: number; timeoutMs: number; robotsProbe: boolean;
+                                          validators?: import("./cache.js").CacheEntry }):
+    Promise<{ body?: string; redirectTo?: string; notModified?: boolean; headers?: Headers }> {
   const u = new URL(url);
   for (let attempt = 0; ; attempt++) {
     await waitForSlot(u.host, o.delay);
     try {
       const res = await fetch(url, {
-        headers: { "User-Agent": pickUserAgent(), "Accept-Language": "tr-TR,tr;q=0.9" },
+        headers: { "User-Agent": pickUserAgent(), "Accept-Language": "tr-TR,tr;q=0.9",
+                   ...conditionalHeaders(o.validators) },
         signal: AbortSignal.timeout(o.timeoutMs),
         redirect: "manual",
       });
+      stats.requests++;
+      if (res.status === 304) {
+        stats.notModified++;
+        await res.body?.cancel();
+        return { notModified: true };
+      }
       if (res.status >= 300 && res.status < 400 && res.headers.get("location")) {
         await res.body?.cancel();
         return { redirectTo: res.headers.get("location")! };
@@ -236,7 +257,7 @@ async function fetchOnce(url: string, o: { delay: number; retries: number; timeo
         blockedHosts.set(u.host, err);
         throw err;
       }
-      if (res.ok) return { body };
+      if (res.ok) { stats.downloaded++; return { body, headers: res.headers }; }
       if (o.robotsProbe && res.status >= 400 && res.status < 500) throw new NoRobotsFile();
       if (res.status >= 500) throw new Error(`HTTP ${res.status} at ${url}`);   // transient: retried below
       throw new HttpStatusError(url, res.status);                                 // 404/410/…: never retried

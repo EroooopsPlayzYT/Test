@@ -2,6 +2,7 @@
 // allows section + thread pages (not /search.asp). Each sale thread carries schema.org
 // Product JSON-LD (title, TRY price, used/new). We store only that: no usernames, avatars,
 // phone numbers or post bodies.
+import { cacheConfig } from "../cache.js";
 import { fetchText, pool } from "../http.js";
 import { productsFromJsonLd } from "../jsonld.js";
 import { Adapter, Product } from "../types.js";
@@ -33,7 +34,7 @@ export function donanimhaber(maxPages = 10, startPage = 1): Adapter {
       const now = new Date().toISOString();
       const rows = await pool(links.slice(0, limit), 1, async (path): Promise<Product | null> => {
         try {
-          const html = await fetchText(BASE + path, { delayMs: 2500 });
+          const html = await fetchText(BASE + path, { delayMs: 2500, maxAgeMs: cacheConfig.itemMaxAgeMs });
           const p = productsFromJsonLd(html)[0];
           if (!p) return null;
           const sold = /\bSATILDI\b/i.test(p.name);

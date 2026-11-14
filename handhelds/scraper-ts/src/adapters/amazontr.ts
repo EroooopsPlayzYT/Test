@@ -7,6 +7,7 @@
 // Improvements: bounded worker pool instead of one unjoined thread per product, card
 // price/title as fallback when a product page fails, numeric prices, no UA rotation.
 import * as cheerio from "cheerio";
+import { cacheConfig } from "../cache.js";
 import { fetchText, pool } from "../http.js";
 import { Adapter, Product, parsePrice } from "../types.js";
 
@@ -78,7 +79,7 @@ export function amazonTr(opts: { details?: boolean; threads?: number } = {}): Ad
         const now = new Date().toISOString();
         if (!details) return { ...r, scrapedAt: now };
         try {
-          const d = parseAmazonProduct(await fetchText(r.url));
+          const d = parseAmazonProduct(await fetchText(r.url, { maxAgeMs: cacheConfig.itemMaxAgeMs }));
           return { ...r, title: d.title ?? r.title, priceTry: d.price ?? r.priceTry, scrapedAt: now };
         } catch (e) {
           console.warn(`  amazontr ${r.id}: product page failed (${(e as Error).message}), using search card`);

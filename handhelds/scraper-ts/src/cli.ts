@@ -10,6 +10,7 @@ import { dirname, join } from "node:path";
 import { parseArgs } from "node:util";
 import { createInterface } from "node:readline";
 import { BlockedError, RobotsDisallowedError } from "./http.js";
+import { cacheConfig, stats } from "./cache.js";
 import { openDb, saveProducts, logRun } from "./db.js";
 import type { Adapter } from "./types.js";
 import { akakce } from "./adapters/akakce.js";
@@ -57,6 +58,8 @@ const { values } = parseArgs({
     sources: { type: "string", short: "s", default: "akakce,idefix,gaming.gen.tr,donanimhaber,amazontr,trendyol" },
     "include-accessories": { type: "boolean", default: false },
     "ua-rotate": { type: "boolean", default: false },
+    refresh: { type: "boolean", default: false },          // ignore the 24 h freshness window
+    "recheck-hours": { type: "string", default: "24" },
     db: { type: "string", default: "out/prices.db" },
     jsonl: { type: "string", default: "out/results.jsonl" },
   },
@@ -94,6 +97,8 @@ if (!Number.isInteger(limit) || limit < 1) {
 mkdirSync(dirname(values.db!), { recursive: true });
 mkdirSync(dirname(values.jsonl!), { recursive: true });
 if (values["ua-rotate"]) process.env.UA_ROTATE = "1";
+cacheConfig.refresh = values.refresh!;
+cacheConfig.itemMaxAgeMs = Number(values["recheck-hours"]) * 3600 * 1000;
 const db = openDb(values.db!);
 const sources = values.sources!.split(",").map((s) => resolve(s.trim()));
 
@@ -134,3 +139,5 @@ for (const query of queries) {
 writeFileSync(join(dirname(values.jsonl!), "results.json"),
               JSON.stringify([...cards.values()].flat(), null, 1));
 db.close();
+console.log(`requests: ${stats.requests} (downloaded ${stats.downloaded}, 304 not-modified ${stats.notModified}), ` +
+            `served from cache without a request: ${stats.servedFresh}`);
