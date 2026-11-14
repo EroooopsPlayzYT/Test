@@ -1,0 +1,86 @@
+{
+ "built_at": "2026-11-14T09:11:46.736158+00:00",
+ "source_db": "handhelds.db",
+ "files": {
+  "listings.parquet": {
+   "rows": 3589,
+   "bytes": 184219,
+   "sha256": "c63f1e00e6c3e3b4ea132d30184dcac8e782188c8a409df6817f0216698527b1"
+  },
+  "listings.csv": {
+   "rows": 3589,
+   "bytes": 1453298,
+   "sha256": "e339017e59c88c283bc3bdee23c8effc46bceebb1c64de54e2212c434ef0a588"
+  },
+  "listings_clean.parquet": {
+   "rows": 1128,
+   "bytes": 73679,
+   "sha256": "301d6046f3ffc7d969bcce4e4833699ada0a5b97f670818658c8f5a44a75ca0b"
+  },
+  "listings_clean.csv": {
+   "rows": 1128,
+   "bytes": 415315,
+   "sha256": "352ad9b3d4c4c55fdba9e8addc809a8bd2719178003f2cffb846028f4ea6edb9"
+  },
+  "priority_watchlist.parquet": {
+   "rows": 44,
+   "bytes": 7385,
+   "sha256": "c834d432c5703a5f6e0b6b5449820b26c396576df61b47a846a6ac283a507e13"
+  },
+  "priority_watchlist.csv": {
+   "rows": 44,
+   "bytes": 9504,
+   "sha256": "050a0156d6b807afe7c97ecdeb7e271eb17f249302127a193471aa3b688abdef"
+  },
+  "akakce_offers.parquet": {
+   "rows": 2641,
+   "bytes": 58552,
+   "sha256": "6851d4435a312141fbaa384d44e3c8d92851583e926dd6b560992a8845409c7d"
+  },
+  "akakce_offers.csv": {
+   "rows": 2641,
+   "bytes": 438259,
+   "sha256": "ac06aef1b6a99290f4c3e1f250535fcbcc75fc63f5ceec5dc9a9ba9ffad93d5f"
+  },
+  "akakce_products.parquet": {
+   "rows": 1043,
+   "bytes": 72823,
+   "sha256": "25d49192a5593f2a4b9c63f26fb837f4c129e8834c868084677884c2189d3497"
+  },
+  "akakce_products.csv": {
+   "rows": 1043,
+   "bytes": 426523,
+   "sha256": "6344dc2fe3490d3f776fa0ef03a9e6a8c66f1d56f2b5fccd52d655dc8b807cae"
+  },
+  "forum_used_listings.parquet": {
+   "rows": 509,
+   "bytes": 24619,
+   "sha256": "ff5092fae890b4cbba9848048fbf9637eb48f9e2cd33b86ab6a794dae1a90b60"
+  },
+  "forum_used_listings.csv": {
+   "rows": 509,
+   "bytes": 96125,
+   "sha256": "30b8e1e81cfeb2e43ec7d8ecdfb3f96880f8ad1f1e4902defdbf200daf0206e8"
+  },
+  "reviews.parquet": {
+   "rows": 9,
+   "bytes": 2020,
+   "sha256": "474119c7f6e544c718e8286512ba075a040ee33a9779568a8a21a425a9fd071f"
+  },
+  "reviews.csv": {
+   "rows": 9,
+   "bytes": 1369,
+   "sha256": "6a3e35fd9a7427b032a2413af54960d55218129e29ce4ad511dfacd172f0783e"
+  },
+  "ml_metrics.parquet": {
+   "rows": 6,
+   "bytes": 1328,
+   "sha256": "b81abacf95f8f034dc4836b60964069f6fd5f8e226c193a65b3e4a2f74fe2229"
+  },
+  "ml_metrics.csv": {
+   "rows": 6,
+   "bytes": 974,
+   "sha256": "ffcf89763a192ef44af8a93f38fac232532745da924d32262650b9371b1aa727"
+  }
+ }
+}
