@@ -141,6 +141,14 @@ def open_domains(db):
         return set(OPEN_DOMAINS)
 
 
+def _iso(ts):
+    """'2026-08-09 15:52:31+00' (DuckDB) -> '2026-08-09T15:52:31+00:00' (same format as the scrapers)."""
+    try:
+        return datetime.fromisoformat(ts.replace("+00", "+00:00") if ts.endswith("+00") else ts).isoformat()
+    except ValueError:
+        return ts
+
+
 def _record(fn, off, ln):
     req = urllib.request.Request(DATA + fn, headers={"User-Agent": UA, "Range": f"bytes={off}-{off + ln - 1}"})
     raw = gzip.decompress(urllib.request.urlopen(req, timeout=60).read())
@@ -156,11 +164,15 @@ def history(limit):
     db.execute("""CREATE TABLE IF NOT EXISTS observations (id INTEGER PRIMARY KEY AUTOINCREMENT, source TEXT NOT NULL,
                   product_id TEXT NOT NULL, title TEXT NOT NULL, price_try REAL, in_stock INTEGER, seller TEXT,
                   condition TEXT, url TEXT NOT NULL, query TEXT, scraped_at TEXT NOT NULL)""")
-    done = {(u, t) for u, t in db.execute("SELECT url, scraped_at FROM observations")}
+    # fix rows written before timestamps were normalised
+    for rid, ts in db.execute("SELECT id, scraped_at FROM observations WHERE scraped_at NOT LIKE '%T%'").fetchall():
+        db.execute("UPDATE observations SET scraped_at = ? WHERE id = ?", (_iso(ts), rid))
+    db.commit()
+    done = {(u, _iso(t)) for u, t in db.execute("SELECT url, scraped_at FROM observations")}
     allowed = open_domains(db)
     todo = [r for r in db.execute("SELECT host, url, fetch_time, warc_filename, warc_offset, warc_length "
                                   "FROM cc_urls ORDER BY fetch_time")
-            if r[0] in allowed and not NEVER_CONTENT.search(r[0]) and (r[1], r[2]) not in done][:limit]
+            if r[0] in allowed and not NEVER_CONTENT.search(r[0]) and (r[1], _iso(r[2])) not in done][:limit]
     print(f"{len(todo)} archived pages to read (open domains only)")
     for host, url, ft, fn, off, ln in todo:
         try:
@@ -186,7 +198,7 @@ def history(limit):
                        "url, query, scraped_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
                        (f"commoncrawl:{host}", url, name.strip(), price,
                         None if not avail else int("InStock" in avail), host,
-                        "used" if "donanimhaber" in host or "r10" in host else "new", url, "cc-history", ft))
+                        "used" if "donanimhaber" in host or "r10" in host else "new", url, "cc-history", _iso(ft)))
             db.commit()
         time.sleep(1.5)   # polite to data.commoncrawl.org
     print("observations:", db.execute("SELECT count(*) FROM observations").fetchone()[0])

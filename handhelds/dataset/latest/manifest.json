@@ -1,36 +1,36 @@
 {
- "built_at": "2026-11-14T09:11:46.736158+00:00",
+ "built_at": "2026-11-14T09:24:18.292402+00:00",
  "source_db": "handhelds.db",
  "files": {
   "listings.parquet": {
-   "rows": 3589,
-   "bytes": 184219,
-   "sha256": "c63f1e00e6c3e3b4ea132d30184dcac8e782188c8a409df6817f0216698527b1"
+   "rows": 3785,
+   "bytes": 197964,
+   "sha256": "057196932f549978391faf72a1f3b9df9365f93db79694b9bad4dd3687343986"
   },
   "listings.csv": {
-   "rows": 3589,
-   "bytes": 1453298,
-   "sha256": "e339017e59c88c283bc3bdee23c8effc46bceebb1c64de54e2212c434ef0a588"
+   "rows": 3785,
+   "bytes": 1534554,
+   "sha256": "04e2a1f74ee4682f9d7c20d4007e6a89d5780660b586681faeb8f0550d637168"
   },
   "listings_clean.parquet": {
-   "rows": 1128,
-   "bytes": 73679,
-   "sha256": "301d6046f3ffc7d969bcce4e4833699ada0a5b97f670818658c8f5a44a75ca0b"
+   "rows": 1171,
+   "bytes": 77063,
+   "sha256": "cbed35e0f1aeb8ee4808c78ac47813f9605626deb570e49d054c7b780a9a5aa5"
   },
   "listings_clean.csv": {
-   "rows": 1128,
-   "bytes": 415315,
-   "sha256": "352ad9b3d4c4c55fdba9e8addc809a8bd2719178003f2cffb846028f4ea6edb9"
+   "rows": 1171,
+   "bytes": 431308,
+   "sha256": "82742af2b031fbb13c30de7fa99aeb578b2ea0d3fa2b32f16024b3e056e54f12"
   },
   "priority_watchlist.parquet": {
    "rows": 44,
-   "bytes": 7385,
-   "sha256": "c834d432c5703a5f6e0b6b5449820b26c396576df61b47a846a6ac283a507e13"
+   "bytes": 7350,
+   "sha256": "476cf785c2d26498f79de347245d7695d61b78e5b40d6eecc0b176bb52968fe0"
   },
   "priority_watchlist.csv": {
    "rows": 44,
-   "bytes": 9504,
-   "sha256": "050a0156d6b807afe7c97ecdeb7e271eb17f249302127a193471aa3b688abdef"
+   "bytes": 9586,
+   "sha256": "fc465e52b4722031d7db7479013ea45bf52007dac86a98466b091d9f23045bc8"
   },
   "akakce_offers.parquet": {
    "rows": 2641,
@@ -74,13 +74,23 @@
   },
   "ml_metrics.parquet": {
    "rows": 6,
-   "bytes": 1328,
-   "sha256": "b81abacf95f8f034dc4836b60964069f6fd5f8e226c193a65b3e4a2f74fe2229"
+   "bytes": 1334,
+   "sha256": "490aacbc027000a87d6f4c87e8eeb1c9811efa61413e6c2663f5e1b77958ff31"
   },
   "ml_metrics.csv": {
    "rows": 6,
-   "bytes": 974,
-   "sha256": "ffcf89763a192ef44af8a93f38fac232532745da924d32262650b9371b1aa727"
+   "bytes": 977,
+   "sha256": "d62ab48c71694585157177122c8671edfd3f6b4f6a80304d4c70d3a3c498d195"
+  },
+  "price_history.parquet": {
+   "rows": 1378,
+   "bytes": 60528,
+   "sha256": "f5dc87d5dc8e7086bd35d781f36addbf0672a2df903fd50a5b167845709aaf60"
+  },
+  "price_history.csv": {
+   "rows": 1378,
+   "bytes": 334038,
+   "sha256": "6e5d2963fc56876df148c05a8b79a89225dccf12773532a3c6bc3d3b7e72dda2"
   }
  }
 }

@@ -199,13 +199,15 @@ def load_manual_listings(db, path="data/manual_listings.jsonl"):
     print(f"manual_listings: {len(rows)} rows")
 
 
-def load_scraper_observations(db, pattern="scraper-ts/out/*.db"):
-    """Copy the TypeScript scraper's observations (every run, timestamped) from all its dbs."""
+def load_scraper_observations(db, patterns=("scraper-ts/out/*.db", "crawler/out/crawl.db",
+                                             "crawler/out/commoncrawl.db")):
+    """Copy observations (every run, timestamped) from the TS scraper, the Scrapy crawler and the
+    Common Crawl history (whose scraped_at is the archive capture time)."""
     db.execute("DROP TABLE IF EXISTS scraper_observations")
     db.execute("""CREATE TABLE scraper_observations (source TEXT, product_id TEXT, title TEXT, price_try REAL,
                   in_stock INTEGER, seller TEXT, condition TEXT, url TEXT, query TEXT, scraped_at TEXT)""")
     rows = []
-    for path in sorted(glob.glob(pattern)):
+    for path in sorted(p for pat in patterns for p in glob.glob(pat)):
         if path.endswith(("test.db", "t2.db", "t3.db")):
             continue  # throwaway test runs
         src = sqlite3.connect(path)
