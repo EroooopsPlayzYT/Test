@@ -1,0 +1,15 @@
+Date: Sat, 14 Nov 2026 08:56:11 GMT
+Content-Type: text/plain
+Cf-Ray: a5a4cd302c145bff-IAD
+Cf-Cache-Status: HIT
+Age: 349
+Cache-Control: public, max-age=2592000, s-maxage=2592000, stale-while-revalidate=60
+Content-Encoding: gzip
+Etag: W/"6a74de2b-31b"
+Expires: Tue, 15 Dec 2026 08:56:11 GMT
+Last-Modified: Thu, 06 Aug 2026 19:19:07 GMT
+Server: cloudflare
+Vary: Accept-Encoding
+X-Cache-Status: MISS
+X-Skip-Cache: 0
+Alt-Svc: h3=":443"; ma=86400

@@ -1,0 +1,13 @@
+Date: Sat, 14 Nov 2026 09:02:38 GMT
+Content-Type: application/xml; charset=UTF-8
+Link: </wp-sitemap.xml>; rel="sitemap"; type="application/xml", </llms.txt>; rel="llms-txt"; type="text/markdown", </llms-full.txt>; rel="llms-txt-full"; type="text/markdown", </sikca-sorulan-sorular/>; rel="help", </kvkk-bilgilendirmesi-ve-gizlilik-politikamiz/>; rel="privacy-policy", </sartlar-ve-kosullar/>; rel="terms-of-service", </iletisim/>; rel="author"
+Cf-Ray: a5a4d6a26d095bff-IAD
+Cf-Cache-Status: HIT
+Cache-Control: public, max-age=2592000, s-maxage=2592000, stale-while-revalidate=60
+Content-Encoding: gzip
+Server: cloudflare
+Vary: Accept-Encoding
+X-Cache-Status: MISS
+X-Skip-Cache: 0
+X-Ua-Compatible: IE=edge
+Alt-Svc: h3=":443"; ma=86400

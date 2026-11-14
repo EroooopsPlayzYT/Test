@@ -1,0 +1,27 @@
+{
+  "_doc": "Sites for the Scrapy spiders. forums: for-sale sections; shops: small shops crawled via their sitemaps (robots.txt decides what's allowed). Usernames / contact details are never stored.",
+  "forums": [
+    {
+      "name": "donanimhaber",
+      "section_url": "https://forum.donanimhaber.com/ikinci-el-konsollar-ve-aksesuarlari--f275",
+      "page_url": "https://forum.donanimhaber.com/ikinci-el-konsollar-ve-aksesuarlari--f275?sayfa={page}",
+      "thread_link_re": "^/[a-z0-9-]+--\\d{6,}$",
+      "max_pages": 10
+    },
+    {
+      "name": "r10",
+      "section_url": "https://www.r10.net/ikinci-el/",
+      "page_url": "https://www.r10.net/ikinci-el/index{page}.html",
+      "thread_link_re": "^/ikinci-el/\\d+-[a-z0-9-]+\\.html$",
+      "max_pages": 10,
+      "_note": "general second-hand board; handheld filter on the URL slug keeps only console posts (low yield)"
+    }
+  ],
+  "shops": [
+    {
+      "name": "gaming.gen.tr",
+      "sitemap": "https://www.gaming.gen.tr/robots.txt",
+      "product_url_re": "/urun/"
+    }
+  ]
+}
