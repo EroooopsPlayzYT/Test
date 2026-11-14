@@ -1,6 +1,6 @@
 # Turkish Handheld Console Prices: dataset card
 
-Built 2026-11-14T09:24 UTC from `handhelds.db`. Regenerate with `python3 -m dataset.build_dataset`.
+Built 2026-11-14T09:27 UTC from `handhelds.db`. Regenerate with `python3 -m dataset.build_dataset`.
 
 ## What it is
 Asking prices for handheld game consoles in Turkey (new and used), collected for **personal research**
@@ -46,15 +46,16 @@ duckdb.sql("SELECT model, variant, condition, median(price_try) FROM 'dataset/la
 ## Files
 | File | Rows | Description |
 |---|---|---|
-| `listings.parquet` / `.csv` | 3785 | Every listing from every source after parsing, categorising, dedupe and ML scoring. |
-| `listings_clean.parquet` / `.csv` | 1171 | Real handhelds only: no clones, accessories, want-to-buy posts or sold items. |
+| `listings.parquet` / `.csv` | 3828 | Every listing from every source after parsing, categorising, dedupe and ML scoring. |
+| `listings_clean.parquet` / `.csv` | 1187 | Real handhelds only: no clones, accessories, want-to-buy posts or sold items. |
 | `priority_watchlist.parquet` / `.csv` | 44 | RP6 8/12GB, AYN, Retroid, RG556/557 rows (priority < 9). |
 | `akakce_offers.parquet` / `.csv` | 2641 | Raw per-seller offers from Akakçe product pages. |
 | `akakce_products.parquet` / `.csv` | 1043 | Raw Akakçe handheld catalogue (lowest price, offer count). |
 | `forum_used_listings.parquet` / `.csv` | 509 | DonanımHaber second-hand section (title, price, sold flag). |
 | `reviews.parquet` / `.csv` | 9 | Akakçe product comments (text, stars, date). No reviewer names. |
 | `ml_metrics.parquet` / `.csv` | 6 | Cross-validated model metrics, FX rate and assumptions of the last analysis run. |
-| `price_history.parquet` / `.csv` | 1378 | Every timestamped observation from the scrapers, the Scrapy crawler and Common Crawl archives (scraped_at = capture time): the price history for ML. |
+| `catalog_wikidata.parquet` / `.csv` | 14 | Handheld specs from Wikidata (CC0): release date, maker, CPU, RAM. |
+| `price_history.parquet` / `.csv` | 1422 | Every timestamped observation from the scrapers, the Scrapy crawler and Common Crawl archives (scraped_at = capture time): the price history for ML. |
 
 ## Data dictionary (`listings` / `listings_clean`)
 

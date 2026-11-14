@@ -184,6 +184,20 @@ def variant(title):
     return f"{r + 'GB' if r else '?'}/{m or '?'}" if (r or m) else None
 
 
+def load_wikidata(db, path="data/wikidata.json"):
+    """Handheld specs from Wikidata (CC0): release date, manufacturer, CPU, RAM."""
+    import os
+    db.execute("DROP TABLE IF EXISTS catalog_wikidata")
+    db.execute("""CREATE TABLE catalog_wikidata (name TEXT, release TEXT, manufacturer TEXT, cpu TEXT, ram TEXT,
+                  launch_price TEXT, wikidata TEXT PRIMARY KEY)""")
+    if os.path.exists(path):
+        rows = json.load(open(path, encoding="utf-8"))
+        db.executemany("INSERT OR IGNORE INTO catalog_wikidata VALUES (?,?,?,?,?,?,?)",
+                       [(r["name"], r["release"], r["manufacturer"], r["cpu"], r["ram"], r["launch_price"],
+                         r["wikidata"]) for r in rows])
+        print(f"catalog_wikidata: {len(rows)} models")
+
+
 def load_manual_listings(db, path="data/manual_listings.jsonl"):
     """Listings reported by the user (or another agent) that the scrapers did not find."""
     import os
@@ -360,6 +374,7 @@ def main():
                     for m in SAHIBINDEN_MODELS])
     load_scraper_observations(db)
     load_manual_listings(db)
+    load_wikidata(db)
     # priority_watchlist is now a view built by analysis/run.py (one priority system)
     db.commit()
     n_shop =db.execute("SELECT count(*) FROM shop_products").fetchone()[0]

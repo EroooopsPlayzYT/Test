@@ -24,6 +24,7 @@ TABLES = {
     "used_listings": ("forum_used_listings", "DonanımHaber second-hand section (title, price, sold flag)."),
     "reviews": ("reviews", "Akakçe product comments (text, stars, date). No reviewer names."),
     "ml_metrics": ("ml_metrics", "Cross-validated model metrics, FX rate and assumptions of the last analysis run."),
+    "catalog_wikidata": ("catalog_wikidata", "Handheld specs from Wikidata (CC0): release date, maker, CPU, RAM."),
     "scraper_observations": ("price_history", "Every timestamped observation from the scrapers, the Scrapy crawler and "
                              "Common Crawl archives (scraped_at = capture time): the price history for ML."),
 }
