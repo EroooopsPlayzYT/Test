@@ -231,6 +231,13 @@ def load_scraper_observations(db, patterns=("scraper-ts/out/*.db", "crawler/out/
         except sqlite3.OperationalError:
             pass
         src.close()
+    # observations imported from other machines (tools/import_remote_db.py)
+    for path in sorted(glob.glob("data/*observations*.jsonl")):
+        cols = ["source", "product_id", "title", "price_try", "in_stock", "seller", "condition", "url", "query",
+                "scraped_at"]
+        for line in open(path, encoding="utf-8"):
+            d = json.loads(line)
+            rows.append(tuple(d.get(c) for c in cols))
     rows = list(dict.fromkeys(rows))  # same observation copied into two dbs
     db.executemany("INSERT INTO scraper_observations VALUES (?,?,?,?,?,?,?,?,?,?)", rows)
     print(f"scraper_observations: {len(rows)} rows")
